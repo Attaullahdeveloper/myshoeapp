@@ -91,6 +91,24 @@ class HomeController extends GetxController {
     }
   }
 
+  void addProduct(Product product) {
+    products.insert(0, product);
+    products.refresh();
+  }
+
+  void updateProduct(Product updatedProduct) {
+    final index = products.indexWhere((p) => p.id == updatedProduct.id);
+    if (index != -1) {
+      products[index] = updatedProduct;
+      products.refresh();
+    }
+  }
+
+  void deleteProduct(String productId) {
+    products.removeWhere((p) => p.id == productId);
+    products.refresh();
+  }
+
   // Filtered products list based on selected category
   List<Product> get filteredProducts {
     return products.where((p) => p.category.toLowerCase() == selectedCategory.value.toLowerCase()).toList();

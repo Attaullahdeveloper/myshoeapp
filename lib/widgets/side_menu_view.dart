@@ -5,6 +5,7 @@ import '../controllers/home_controller.dart';
 import '../views/auth/signin_view.dart';
 import '../views/cart/cart_view.dart';
 import '../views/profile/profile_view.dart';
+import '../views/admin/admin_dashboard_view.dart';
 import '../views/companies/edit_companies_view.dart';
 import '../widgets/responsive_text.dart';
 
@@ -135,6 +136,14 @@ class SideMenuView extends StatelessWidget {
                         onTap: () {
                           zoomDrawerController.close?.call();
                           controller.changeIndex(2); // Notifications tab
+                        },
+                      ),
+                      _buildMenuItem(
+                        icon: Icons.admin_panel_settings_outlined,
+                        title: 'Admin Panel',
+                        onTap: () {
+                          zoomDrawerController.close?.call();
+                          Get.to(() => const AdminDashboardView());
                         },
                       ),
                       _buildMenuItem(

@@ -482,43 +482,47 @@ class _ProductDetailViewState extends State<ProductDetailView> with SingleTicker
                                       ],
                                     ),
                                     const SizedBox(height: 12),
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [38, 39, 40, 41, 42, 43].map((sizeVal) {
-                                        final isSelected = _selectedSize == sizeVal;
-                                        return GestureDetector(
-                                          onTap: () {
-                                            setState(() {
-                                              _selectedSize = sizeVal;
-                                            });
-                                          },
-                                          child: Container(
-                                            width: 42,
-                                            height: 42,
-                                            decoration: BoxDecoration(
-                                              color: isSelected ? AppColors.onboardingBtn : const Color(0xFFF9F9F9),
-                                              shape: BoxShape.circle,
-                                              boxShadow: isSelected
-                                                  ? [
-                                                      BoxShadow(
-                                                        color: AppColors.onboardingBtn.withValues(alpha: 0.35),
-                                                        blurRadius: 8,
-                                                        offset: const Offset(0, 3),
-                                                      ),
-                                                    ]
-                                                  : null,
-                                            ),
-                                            child: Center(
-                                              child: ResponsiveText(
-                                                sizeVal.toString(),
-                                                fontSize: 13,
-                                                fontWeight: FontWeight.w600,
-                                                color: isSelected ? Colors.white : AppColors.onboardingTitle,
+                                    SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      physics: const BouncingScrollPhysics(),
+                                      child: Row(
+                                        children: (product.sizes.isNotEmpty ? product.sizes : [38, 39, 40, 41, 42, 43]).map((sizeVal) {
+                                          final isSelected = _selectedSize == sizeVal;
+                                          return GestureDetector(
+                                            onTap: () {
+                                              setState(() {
+                                                _selectedSize = sizeVal;
+                                              });
+                                            },
+                                            child: Container(
+                                              margin: const EdgeInsets.only(right: 10),
+                                              width: 42,
+                                              height: 42,
+                                              decoration: BoxDecoration(
+                                                color: isSelected ? AppColors.onboardingBtn : const Color(0xFFF9F9F9),
+                                                shape: BoxShape.circle,
+                                                boxShadow: isSelected
+                                                    ? [
+                                                        BoxShadow(
+                                                          color: AppColors.onboardingBtn.withValues(alpha: 0.35),
+                                                          blurRadius: 8,
+                                                          offset: const Offset(0, 3),
+                                                        ),
+                                                      ]
+                                                    : null,
+                                              ),
+                                              child: Center(
+                                                child: ResponsiveText(
+                                                  sizeVal.toString(),
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w600,
+                                                  color: isSelected ? Colors.white : AppColors.onboardingTitle,
+                                                ),
                                               ),
                                             ),
-                                          ),
-                                        );
-                                      }).toList(),
+                                          );
+                                        }).toList(),
+                                      ),
                                     ),
                                   ],
                                 ),
