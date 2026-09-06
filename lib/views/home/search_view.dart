@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import '../../controllers/home_controller.dart';
 import '../../models/product.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_shimmer.dart';
 import '../../widgets/responsive_text.dart';
 import 'home_view.dart';
 import 'product_detail_view.dart';
@@ -251,7 +252,10 @@ class _SearchViewState extends State<SearchView> {
   // ── FILTERED SEARCH RESULTS GRID WITH STAGGERED ANIMATIONS ────────────────
   Widget _buildSearchResultsGrid(HomeController controller, Size size) {
     final query = _searchQuery.toLowerCase();
-    final matchingProducts = controller.products.where((p) {
+    final sourceList = controller.allProducts.isNotEmpty
+        ? controller.allProducts
+        : controller.products;
+    final matchingProducts = sourceList.where((p) {
       return p.name.toLowerCase().contains(query) ||
           p.category.toLowerCase().contains(query) ||
           p.description.toLowerCase().contains(query);
@@ -325,10 +329,27 @@ class _SearchViewState extends State<SearchView> {
               child: Center(
                 child: Hero(
                   tag: 'search_result_${product.id}',
-                  child: Image.asset(
-                    product.image,
-                    fit: BoxFit.contain,
-                  ),
+                  child: product.image.startsWith('http')
+                      ? Image.network(
+                          product.image,
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const ShimmerImageLoader(
+                              width: 110,
+                              height: 90,
+                              borderRadius: 12,
+                            );
+                          },
+                          errorBuilder: (_, __, ___) => Image.asset(
+                            'assets/images/shoe_nike_1.png',
+                            fit: BoxFit.contain,
+                          ),
+                        )
+                      : Image.asset(
+                          product.image,
+                          fit: BoxFit.contain,
+                        ),
                 ),
               ),
             ),

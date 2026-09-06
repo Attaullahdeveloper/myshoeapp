@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/app_toast.dart';
 import '../views/home/main_zoom_drawer.dart';
 
 class AuthController extends GetxController {
@@ -17,6 +19,8 @@ class AuthController extends GetxController {
   // Recovery Password controllers
   final recoveryEmail = TextEditingController();
 
+  final RxBool isLoading = false.obs;
+
   void toggleSignInPasswordVisibility() {
     signInPasswordVisible.value = !signInPasswordVisible.value;
   }
@@ -30,45 +34,33 @@ class AuthController extends GetxController {
     final password = signInPassword.text;
 
     if (email.isEmpty) {
-      Get.snackbar(
-        'Required Field',
-        'Please enter your email address',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Required Field',
+        message: 'Please enter your email address',
       );
       return false;
     }
 
     if (!GetUtils.isEmail(email)) {
-      Get.snackbar(
-        'Invalid Email',
-        'Please enter a valid email address',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Invalid Email',
+        message: 'Please enter a valid email address',
       );
       return false;
     }
 
     if (password.isEmpty) {
-      Get.snackbar(
-        'Required Field',
-        'Please enter your password',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Required Field',
+        message: 'Please enter your password',
       );
       return false;
     }
 
     if (password.length < 6) {
-      Get.snackbar(
-        'Weak Password',
-        'Password must be at least 6 characters long',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Weak Password',
+        message: 'Password must be at least 6 characters long',
       );
       return false;
     }
@@ -82,56 +74,41 @@ class AuthController extends GetxController {
     final password = signUpPassword.text;
 
     if (name.isEmpty) {
-      Get.snackbar(
-        'Required Field',
-        'Please enter your name',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Required Field',
+        message: 'Please enter your full name',
       );
       return false;
     }
 
     if (email.isEmpty) {
-      Get.snackbar(
-        'Required Field',
-        'Please enter your email address',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Required Field',
+        message: 'Please enter your email address',
       );
       return false;
     }
 
     if (!GetUtils.isEmail(email)) {
-      Get.snackbar(
-        'Invalid Email',
-        'Please enter a valid email address',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Invalid Email',
+        message: 'Please enter a valid email address',
       );
       return false;
     }
 
     if (password.isEmpty) {
-      Get.snackbar(
-        'Required Field',
-        'Please enter a password',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Required Field',
+        message: 'Please enter a password',
       );
       return false;
     }
 
     if (password.length < 6) {
-      Get.snackbar(
-        'Weak Password',
-        'Password must be at least 6 characters long',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Weak Password',
+        message: 'Password must be at least 6 characters long',
       );
       return false;
     }
@@ -143,23 +120,17 @@ class AuthController extends GetxController {
     final email = recoveryEmail.text.trim();
 
     if (email.isEmpty) {
-      Get.snackbar(
-        'Required Field',
-        'Please enter your email address',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Required Field',
+        message: 'Please enter your email address',
       );
       return false;
     }
 
     if (!GetUtils.isEmail(email)) {
-      Get.snackbar(
-        'Invalid Email',
-        'Please enter a valid email address',
-        snackPosition: SnackPosition.BOTTOM,
-        backgroundColor: const Color(0xFFE57373),
-        colorText: Colors.white,
+      AppToast.showError(
+        title: 'Invalid Email',
+        message: 'Please enter a valid email address',
       );
       return false;
     }
@@ -167,45 +138,92 @@ class AuthController extends GetxController {
     return true;
   }
 
-  void login() {
-    Get.snackbar(
-      'Success',
-      'Welcome back to MM Shoes!',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: const Color(0xFF81C784),
-      colorText: Colors.white,
-    );
-    Get.offAll(() => const MainZoomDrawer());
+  Future<void> login({bool isFromCheckout = false}) async {
+    if (!validateSignIn()) return;
+
+    isLoading.value = true;
+    try {
+      final email = signInEmail.text.trim();
+      final password = signInPassword.text;
+      
+      final res = await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      isLoading.value = false;
+      if (res.user != null) {
+        AppToast.showSuccess(
+          title: 'Welcome Back!',
+          message: 'Signed in successfully!',
+        );
+        if (isFromCheckout) {
+          Get.back();
+        } else {
+          Get.offAll(() => const MainZoomDrawer());
+        }
+      }
+    } catch (e) {
+      isLoading.value = false;
+      AppToast.showError(
+        title: 'Sign In Failed',
+        message: e.toString().replaceFirst('AuthException: ', ''),
+      );
+    }
   }
 
-  void register() {
-    Get.snackbar(
-      'Account Created',
-      'Your account has been successfully created!',
-      snackPosition: SnackPosition.BOTTOM,
-      backgroundColor: const Color(0xFF81C784),
-      colorText: Colors.white,
-    );
-    // Automatically redirect to MainZoomDrawer
-    Get.offAll(() => const MainZoomDrawer());
+  Future<void> register({bool isFromCheckout = false}) async {
+    if (!validateSignUp()) return;
+
+    isLoading.value = true;
+    try {
+      final name = signUpName.text.trim();
+      final email = signUpEmail.text.trim();
+      final password = signUpPassword.text;
+
+      final res = await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: password,
+        data: {'full_name': name},
+      );
+
+      isLoading.value = false;
+      if (res.user != null) {
+        AppToast.showSuccess(
+          title: 'Account Created',
+          message: 'Welcome to MM Shoes, $name!',
+        );
+        if (isFromCheckout) {
+          Get.back();
+        } else {
+          Get.offAll(() => const MainZoomDrawer());
+        }
+      }
+    } catch (e) {
+      isLoading.value = false;
+      AppToast.showError(
+        title: 'Registration Failed',
+        message: e.toString().replaceFirst('AuthException: ', ''),
+      );
+    }
   }
 
-  void recover() {
-    Get.dialog(
-      AlertDialog(
-        title: const Text('Check Your Email'),
-        content: const Text('A password recovery link has been sent to your email. Please check your inbox.'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Get.back(); // close dialog
-              Get.back(); // go back to sign in screen
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+  Future<void> recover() async {
+    if (!validateRecovery()) return;
+    try {
+      final email = recoveryEmail.text.trim();
+      await Supabase.instance.client.auth.resetPasswordForEmail(email);
+      AppToast.showSuccess(
+        title: 'Recovery Email Sent',
+        message: 'Password reset link sent to $email. Please check your inbox.',
+      );
+      Get.back();
+    } catch (e) {
+      AppToast.showError(
+        title: 'Password Reset Failed',
+        message: e.toString().replaceFirst('AuthException: ', ''),
+      );
+    }
   }
 
   @override

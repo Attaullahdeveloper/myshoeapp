@@ -3,13 +3,16 @@ import 'package:get/get.dart';
 import '../../controllers/home_controller.dart';
 import '../../models/product.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/app_toast.dart';
 import '../../widgets/responsive_text.dart';
 import '../../widgets/shimmer_loader.dart';
 import 'product_detail_view.dart';
 import 'home_view.dart';
+import 'search_view.dart';
 
 class BestSellersView extends StatefulWidget {
-  const BestSellersView({super.key});
+  final String? initialBrand;
+  const BestSellersView({super.key, this.initialBrand});
 
   @override
   State<BestSellersView> createState() => _BestSellersViewState();
@@ -17,6 +20,7 @@ class BestSellersView extends StatefulWidget {
 
 class _BestSellersViewState extends State<BestSellersView> {
   bool _isLoading = true;
+  late final RxString _selectedBrand;
 
   // Preset color dot pairs for shoe cards matching design mockup
   final List<List<Color>> _colorPairs = const [
@@ -31,8 +35,14 @@ class _BestSellersViewState extends State<BestSellersView> {
   @override
   void initState() {
     super.initState();
-    // Simulate high-end shimmer skeleton loading on view load
-    Future.delayed(const Duration(milliseconds: 600), () {
+    _selectedBrand = (widget.initialBrand ?? 'All').obs;
+
+    final controller = Get.isRegistered<HomeController>()
+        ? Get.find<HomeController>()
+        : Get.put(HomeController());
+    controller.fetchAllProducts();
+
+    Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -95,11 +105,10 @@ class _BestSellersViewState extends State<BestSellersView> {
                     children: [
                       GestureDetector(
                         onTap: () {
-                          Get.snackbar(
-                            'Filter & Sort',
-                            'Opening filter options...',
-                            snackPosition: SnackPosition.BOTTOM,
-                            margin: const EdgeInsets.only(bottom: 20, left: 16, right: 16),
+                          AppToast.showInfo(
+                            context: context,
+                            title: 'Filter & Sort',
+                            message: 'Select brands using the chips below',
                           );
                         },
                         child: Container(
@@ -120,14 +129,7 @@ class _BestSellersViewState extends State<BestSellersView> {
                       ),
                       const SizedBox(width: 8),
                       GestureDetector(
-                        onTap: () {
-                          Get.snackbar(
-                            'Search',
-                            'Search functionality coming soon...',
-                            snackPosition: SnackPosition.BOTTOM,
-                            margin: const EdgeInsets.only(bottom: 20, left: 16, right: 16),
-                          );
-                        },
+                        onTap: () => Get.to(() => const SearchView()),
                         child: Container(
                           width: 42,
                           height: 42,
@@ -150,17 +152,109 @@ class _BestSellersViewState extends State<BestSellersView> {
               ),
             ),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
+
+            // ── BRAND FILTER CHIPS (All Brands + Individual Companies) ──
+            SizedBox(
+              height: 38,
+              child: Obx(() {
+                final companyNames = <String>[];
+                for (var c in controller.companies) {
+                  final name = c['name']?.toString() ?? '';
+                  if (name.isNotEmpty && !companyNames.contains(name)) {
+                    companyNames.add(name);
+                  }
+                }
+                final allChips = ['All', ...companyNames];
+
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
+                  itemCount: allChips.length,
+                  itemBuilder: (context, index) {
+                    final chipLabel = allChips[index];
+                    return Obx(() {
+                      final isSelected =
+                          _selectedBrand.value.toLowerCase() == chipLabel.toLowerCase();
+                      return GestureDetector(
+                        onTap: () => _selectedBrand.value = chipLabel,
+                        child: Container(
+                          margin: const EdgeInsets.only(right: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: isSelected ? AppColors.onboardingTitle : Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? AppColors.onboardingTitle : Colors.black12,
+                            ),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.15),
+                                      blurRadius: 6,
+                                      offset: const Offset(0, 3),
+                                    )
+                                  ]
+                                : null,
+                          ),
+                          child: Center(
+                            child: Text(
+                              chipLabel,
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                                color: isSelected ? Colors.white : AppColors.onboardingTitle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    });
+                  },
+                );
+              }),
+            ),
+
+            const SizedBox(height: 14),
 
             // ── 2-COLUMN GRID VIEW OF BEST SELLERS SHOES ──────────────────────
             Expanded(
               child: _isLoading
                   ? const BestSellersGridSkeleton(itemCount: 6)
                   : Obx(() {
-                      final allProducts = controller.products;
-                      // Prefer best seller shoes first, or show all shoes
-                      final bestSellers = allProducts.where((p) => p.isBestSeller).toList();
-                      final displayList = bestSellers.isNotEmpty ? bestSellers : allProducts;
+                      final sourceList = controller.allProducts.isNotEmpty
+                          ? controller.allProducts
+                          : controller.products;
+
+                      final filteredList = _selectedBrand.value == 'All'
+                          ? sourceList
+                          : sourceList.where((p) {
+                              return p.category.toLowerCase() ==
+                                  _selectedBrand.value.toLowerCase();
+                            }).toList();
+
+                      if (filteredList.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.do_not_disturb_alt_outlined,
+                                size: 48,
+                                color: AppColors.onboardingSub.withValues(alpha: 0.5),
+                              ),
+                              const SizedBox(height: 12),
+                              ResponsiveText(
+                                'No shoes found for ${_selectedBrand.value}',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.onboardingSub,
+                              ),
+                            ],
+                          ),
+                        );
+                      }
 
                       return GridView.builder(
                         physics: const BouncingScrollPhysics(),
@@ -171,9 +265,9 @@ class _BestSellersViewState extends State<BestSellersView> {
                           crossAxisSpacing: 16,
                           mainAxisSpacing: 16,
                         ),
-                        itemCount: displayList.length,
+                        itemCount: filteredList.length,
                         itemBuilder: (context, index) {
-                          final product = displayList[index];
+                          final product = filteredList[index];
                           final colors = _colorPairs[index % _colorPairs.length];
                           return ScaleFadeShuffleWidget(
                             index: index,
@@ -241,11 +335,53 @@ class _BestSellersViewState extends State<BestSellersView> {
                   // Product Shoe Image
                   Hero(
                     tag: 'best_seller_grid_${product.id}',
-                    child: Image.asset(
-                      product.image,
-                      fit: BoxFit.contain,
-                    ),
+                    child: product.image.startsWith('http')
+                        ? Image.network(
+                            product.image,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, size: 40),
+                          )
+                        : Image.asset(
+                            product.image,
+                            fit: BoxFit.contain,
+                          ),
                   ),
+
+                  // Out of Stock Overlay
+                  if (product.isOutOfStock)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Center(
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFEF4444),
+                              borderRadius: BorderRadius.circular(6),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFEF4444).withValues(alpha: 0.45),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
+                            ),
+                            child: const Text(
+                              'OUT OF STOCK',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),

@@ -5,6 +5,8 @@ import '../../controllers/home_controller.dart';
 import '../../models/cart_item.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_images.dart';
+import '../../widgets/app_delete_dialog.dart';
+import '../../widgets/app_shimmer.dart';
 import '../../widgets/responsive_text.dart';
 import '../checkout/checkout_view.dart';
 
@@ -116,6 +118,10 @@ class _CartViewState extends State<CartView> with SingleTickerProviderStateMixin
                 stream: cartController.cartStream,
                 initialData: cartController.items,
                 builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                    return const CartItemsShimmer(itemCount: 3);
+                  }
+
                   final items = snapshot.data ?? [];
 
                   if (items.isEmpty) {
@@ -302,7 +308,9 @@ class _CartViewState extends State<CartView> with SingleTickerProviderStateMixin
                         width: double.infinity,
                         height: 52,
                         child: ElevatedButton(
-                          onPressed: () => Get.to(() => const CheckoutView()),
+                          onPressed: () {
+                            Get.to(() => const CheckoutView());
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF5B9EE1), // Blue primary
                             shape: RoundedRectangleBorder(
@@ -361,12 +369,27 @@ class _CartViewState extends State<CartView> with SingleTickerProviderStateMixin
               borderRadius: BorderRadius.circular(16),
             ),
             child: Center(
-              child: Image.asset(
-                item.product.image,
-                width: 70,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
-              ),
+              child: item.product.image.startsWith('http')
+                  ? Image.network(
+                      item.product.image,
+                      width: 70,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const ShimmerImageLoader(width: 70, height: 70, borderRadius: 12);
+                      },
+                      errorBuilder: (_, __, ___) => Image.asset(
+                        AppImages.boot,
+                        width: 70,
+                        fit: BoxFit.contain,
+                      ),
+                    )
+                  : Image.asset(
+                      item.product.image,
+                      width: 70,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                    ),
             ),
           ),
 
@@ -390,61 +413,14 @@ class _CartViewState extends State<CartView> with SingleTickerProviderStateMixin
                   fontWeight: FontWeight.w600,
                   color: AppColors.onboardingSub,
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
 
-                // Quantity Control Row (- Qty +)
-                Row(
-                  children: [
-                    // Minus Button
-                    GestureDetector(
-                      onTap: () => cartController.decrementQuantity(item.id),
-                      child: Container(
-                        width: 26,
-                        height: 26,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFF4F4F4),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: Icon(
-                            Icons.remove,
-                            size: 14,
-                            color: AppColors.onboardingSub,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      child: ResponsiveText(
-                        '${item.quantity}',
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.onboardingTitle,
-                      ),
-                    ),
-
-                    // Plus Button (Blue Circle)
-                    GestureDetector(
-                      onTap: () => cartController.incrementQuantity(item.id),
-                      child: Container(
-                        width: 26,
-                        height: 26,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF5B9EE1),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Center(
-                          child: Icon(
-                            Icons.add,
-                            size: 14,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                // Simple Quantity Text (No +/- stepper)
+                ResponsiveText(
+                  'Qty: ${item.quantity}',
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.onboardingSub,
                 ),
               ],
             ),
@@ -474,7 +450,16 @@ class _CartViewState extends State<CartView> with SingleTickerProviderStateMixin
 
               // Trash Delete Icon
               GestureDetector(
-                onTap: () => cartController.removeFromCart(item.id),
+                onTap: () {
+                  AppDeleteDialog.show(
+                    context,
+                    title: 'Remove Item',
+                    description:
+                        'Are you sure you want to remove "${item.product.name}" from your cart?',
+                    confirmText: 'Remove',
+                    onConfirm: () => cartController.removeFromCart(item.id),
+                  );
+                },
                 child: Image.asset(
                   AppImages.deleteTrash,
                   width: 22,

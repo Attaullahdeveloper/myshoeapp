@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/app_toast.dart';
+import '../../widgets/app_delete_dialog.dart';
 import '../../widgets/responsive_text.dart';
+import '../auth/signin_view.dart';
 
 class AccountSettingsView extends StatefulWidget {
   const AccountSettingsView({super.key});
@@ -106,7 +110,31 @@ class _AccountSettingsViewState extends State<AccountSettingsView> {
                     _buildAccountTile(
                       icon: Icons.delete_outline_rounded,
                       title: 'Delete Account',
-                      onTap: () {},
+                      onTap: () {
+                        AppDeleteDialog.show(
+                          context,
+                          title: 'Delete account',
+                          description:
+                              'Are you sure you want to delete your account? All of your data will be permanently removed.',
+                          confirmText: 'Delete',
+                          onConfirm: () async {
+                            try {
+                              final supabase = Supabase.instance.client;
+                              await supabase.auth.signOut();
+                              AppToast.showSuccess(
+                                title: 'Account Signed Out',
+                                message: 'Your account session has been closed.',
+                              );
+                              Get.offAll(() => const SignInView());
+                            } catch (e) {
+                              AppToast.showError(
+                                title: 'Action Failed',
+                                message: e.toString().split('\n').first,
+                              );
+                            }
+                          },
+                        );
+                      },
                     ),
                     _buildDivider(),
                   ],

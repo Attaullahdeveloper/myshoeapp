@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:flutter_zoom_drawer/flutter_zoom_drawer.dart';
@@ -9,13 +10,16 @@ import '../../widgets/responsive_text.dart';
 import '../../widgets/fluid_pop_nav_item.dart';
 import '../../models/product.dart';
 import 'product_detail_view.dart';
+import 'best_sellers_view.dart';
 import '../cart/cart_view.dart';
 import '../favorites/favorite_view.dart';
 import '../notifications/notifications_view.dart';
-import 'best_sellers_view.dart';
 import 'search_view.dart';
 import '../profile/profile_view.dart';
 import '../profile/account_settings_view.dart';
+import '../orders/my_orders_view.dart';
+import '../../utils/app_toast.dart';
+import '../../widgets/app_shimmer.dart';
 
 class HomeView extends StatelessWidget {
   final ZoomDrawerController? zoomDrawerController;
@@ -93,7 +97,7 @@ class HomeView extends StatelessWidget {
                                   isSelected: controller.selectedIndex.value == 1,
                                   onTap: () => controller.changeIndex(1),
                                 )),
-                            const SizedBox(width: 76), // Symmetrical gap for center FAB scoop
+                            const SizedBox(width: 44), // Symmetrical gap for center FAB scoop
                             Obx(() => FluidPopNavItem(
                                   index: 2,
                                   iconData: Icons.notifications_none_outlined,
@@ -285,90 +289,149 @@ class HomeView extends StatelessWidget {
             ),
           ),
 
-          SizedBox(height: size.height * 0.025),
+          SizedBox(height: size.height * 0.024),
 
-          // ── Category List (Horizontal Brands - Scrollable with larger icons) ──
+          // ── BRANDS Section Header ──
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                const Text(
+                  'BRANDS',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.6,
+                    color: Color(0xFF94A3B8),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => controller.selectCompany(null),
+                  behavior: HitTestBehavior.opaque,
+                  child: const Text(
+                    'See all',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF5B9EE1),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ── Category List (Horizontal Brand Chips - Dynamic from Supabase) ──
           SizedBox(
-            height: 48,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              physics: const BouncingScrollPhysics(),
-              padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
-              itemCount: controller.brands.length,
-              itemBuilder: (context, index) {
-                final brand = controller.brands[index];
-                final brandName = brand['name']!;
-                final logoAsset = brand['logo']!;
+            height: 40,
+            child: Obx(() {
+              if (controller.isLoadingCompanies.value && controller.companies.isEmpty) {
+                return const HomeBrandLogosShimmer();
+              }
 
-                return Obx(() {
-                  final isSelected = controller.selectedCategory.value == brandName;
-                  return GestureDetector(
-                    onTap: () => controller.changeCategory(brandName),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeInOut,
-                      margin: const EdgeInsets.only(right: 12),
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isSelected ? 14 : 0,
-                      ),
-                      width: isSelected ? 110 : 44,
-                      height: 44,
-                      clipBehavior: Clip.antiAlias,
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.onboardingBtn : Colors.white,
-                        borderRadius: BorderRadius.circular(22),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withValues(alpha: 0.015),
-                            blurRadius: 5,
-                            offset: const Offset(0, 2),
+              final totalCount = 1 + controller.companies.length;
+
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
+                itemCount: totalCount,
+                itemBuilder: (context, index) {
+                  return Obx(() {
+                    final bool isAllShoes = index == 0;
+                    final bool isSelected = isAllShoes
+                        ? controller.selectedCompanyId.value == null
+                        : controller.selectedCompanyId.value ==
+                            controller.companies[index - 1]['id']?.toString();
+
+                    final String name = isAllShoes
+                        ? 'All Shoes'
+                        : (controller.companies[index - 1]['name']?.toString() ?? 'Brand');
+
+                    final String? logoUrl = isAllShoes
+                        ? null
+                        : controller.companies[index - 1]['image_url']?.toString();
+
+                    final String? companyId = isAllShoes
+                        ? null
+                        : controller.companies[index - 1]['id']?.toString();
+
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: GestureDetector(
+                        onTap: () {
+                          if (isAllShoes) {
+                            controller.selectCompany(null);
+                          } else {
+                            if (isSelected) {
+                              controller.selectCompany(null);
+                            } else {
+                              controller.selectCompany(companyId);
+                            }
+                          }
+                        },
+                        behavior: HitTestBehavior.opaque,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          curve: Curves.easeInOut,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? const Color(0xFF0F172A)
+                                : const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(22),
                           ),
-                        ],
-                      ),
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        physics: const NeverScrollableScrollPhysics(),
-                        child: SizedBox(
-                          width: 110,
-                          height: 44,
                           child: Row(
-                            mainAxisAlignment: MainAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              const SizedBox(width: 3),
-                              Container(
-                                width: 38,
-                                height: 38,
-                                decoration: BoxDecoration(
-                                  color: isSelected ? Colors.white : Colors.transparent,
-                                  shape: BoxShape.circle,
+                              if (logoUrl != null && logoUrl.isNotEmpty) ...[
+                                SizedBox(
+                                  width: 17,
+                                  height: 17,
+                                  child: logoUrl.startsWith('http')
+                                      ? Image.network(
+                                          logoUrl,
+                                          fit: BoxFit.contain,
+                                          filterQuality: FilterQuality.high,
+                                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                        )
+                                      : Image.asset(
+                                          logoUrl,
+                                          fit: BoxFit.contain,
+                                          filterQuality: FilterQuality.high,
+                                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                                        ),
                                 ),
-                                padding: const EdgeInsets.all(2.0),
-                                child: Image.asset(
-                                  logoAsset,
-                                  fit: BoxFit.contain,
+                                const SizedBox(width: 7),
+                              ],
+                              Text(
+                                name,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                                  color: isSelected
+                                      ? Colors.white
+                                      : const Color(0xFF1E293B),
+                                  letterSpacing: 0.1,
                                 ),
                               ),
-                              if (isSelected) ...[
-                                const SizedBox(width: 8),
-                                ResponsiveText(
-                                  brandName,
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.white,
-                                ),
-                              ],
                             ],
                           ),
                         ),
                       ),
-                    ),
-                  );
-                });
-              },
-            ),
+                    );
+                  });
+                },
+              );
+            }),
           ),
 
-          SizedBox(height: size.height * 0.035),
+          SizedBox(height: size.height * 0.032),
 
           // ── Popular Shoes Section Header ──
           Padding(
@@ -376,16 +439,16 @@ class HomeView extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                ResponsiveText(
+                const ResponsiveText(
                   'Popular Shoes',
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppColors.onboardingTitle,
                 ),
                 GestureDetector(
-                  onTap: () {
-                    Get.to(() => const BestSellersView());
-                  },
+                  onTap: () => Get.to(() => BestSellersView(
+                        initialBrand: controller.selectedCategory.value,
+                      )),
                   child: const ResponsiveText(
                     'See all',
                     fontSize: 13,
@@ -403,16 +466,32 @@ class HomeView extends StatelessWidget {
           SizedBox(
             height: 215,
             child: Obx(() {
-              final list = controller.filteredProducts;
-              final activeCategory = controller.selectedCategory.value;
+              if (controller.isLoadingProducts.value) {
+                return const HomePopularShoesShimmer(count: 3);
+              }
+
+              final list = controller.products;
+              final activeKey = controller.selectedCompanyId.value ?? 'all';
 
               if (list.isEmpty) {
                 return Center(
-                  key: ValueKey('empty_$activeCategory'),
-                  child: ResponsiveText(
-                    'No products found for this brand',
-                    fontSize: 14,
-                    color: AppColors.onboardingSub,
+                  key: ValueKey('empty_$activeKey'),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.do_not_disturb_alt_outlined,
+                        size: 38,
+                        color: AppColors.onboardingSub.withValues(alpha: 0.6),
+                      ),
+                      const SizedBox(height: 8),
+                      const ResponsiveText(
+                        'No shoes found for this brand',
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.onboardingSub,
+                      ),
+                    ],
                   ),
                 );
               }
@@ -426,8 +505,8 @@ class HomeView extends StatelessWidget {
                   );
                 },
                 child: ListView.builder(
-                  key: ValueKey(activeCategory),
-                  controller: controller.getScrollController(activeCategory),
+                  key: ValueKey(activeKey),
+                  controller: controller.getScrollController(activeKey),
                   scrollDirection: Axis.horizontal,
                   physics: const BouncingScrollPhysics(),
                   padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
@@ -435,7 +514,7 @@ class HomeView extends StatelessWidget {
                   itemBuilder: (context, index) {
                     return ScaleFadeShuffleWidget(
                       index: index,
-                      child: _buildProductCard(context, list[index], controller, index, activeCategory),
+                      child: _buildProductCard(context, list[index], controller, index, activeKey),
                     );
                   },
                 ),
@@ -451,14 +530,14 @@ class HomeView extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                ResponsiveText(
+                const ResponsiveText(
                   'New Arrivals',
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   color: AppColors.onboardingTitle,
                 ),
                 GestureDetector(
-                  onTap: () {},
+                  onTap: () => Get.to(() => const BestSellersView(initialBrand: 'All')),
                   child: const ResponsiveText(
                     'See all',
                     fontSize: 13,
@@ -476,6 +555,9 @@ class HomeView extends StatelessWidget {
           SizedBox(
             height: 125,
             child: Obx(() {
+              if (controller.isLoadingNewArrivals.value && controller.newArrivalProducts.isEmpty) {
+                return const HomeNewArrivalsShimmer();
+              }
               final newArrivals = controller.newArrivalProducts;
               if (newArrivals.isEmpty) {
                 return Center(
@@ -508,6 +590,73 @@ class HomeView extends StatelessWidget {
               );
             }),
           ),
+          SizedBox(height: size.height * 0.035),
+
+          // ── Special Offers / Discount Deals Section Header ──
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const ResponsiveText(
+                  'Special Offers',
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.onboardingTitle,
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFE8EC),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const ResponsiveText(
+                    'HOT DEALS',
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Color(0xFFE74C3C),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Special Offers Cards horizontal list (Same style as New Arrivals) ──
+          SizedBox(
+            height: 125,
+            child: Obx(() {
+              if (controller.isLoadingDiscountProducts.value) {
+                return const HomeNewArrivalsShimmer();
+              }
+
+              final discounts = controller.discountProducts;
+
+              if (discounts.isEmpty) {
+                return Center(
+                  child: ResponsiveText(
+                    'No special discount deals right now',
+                    fontSize: 13,
+                    color: AppColors.onboardingSub,
+                  ),
+                );
+              }
+
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                physics: const BouncingScrollPhysics(),
+                padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
+                itemCount: discounts.length,
+                itemBuilder: (context, index) {
+                  return ScaleFadeShuffleWidget(
+                    index: index,
+                    child: _buildNewArrivalCard(size, discounts[index], 0.0),
+                  );
+                },
+              );
+            }),
+          ),
         ],
       ),
     );
@@ -535,15 +684,15 @@ class HomeView extends StatelessWidget {
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // 1. Heart Favorite Button (Top Left)
+          // 1a. Heart Favorite Button (Top Left)
           Positioned(
-            top: 12,
-            left: 12,
+            top: 10,
+            left: 10,
             child: Obx(() => GestureDetector(
                   onTap: () => controller.toggleFavorite(product.id),
                   child: Container(
-                    width: 28,
-                    height: 28,
+                    width: 26,
+                    height: 26,
                     decoration: BoxDecoration(
                       color: product.isFavorite.value
                           ? const Color(0xFFFFE8EC)
@@ -553,8 +702,8 @@ class HomeView extends StatelessWidget {
                     child: Center(
                       child: Image.asset(
                         'assets/icons/favorite.png',
-                        width: 14,
-                        height: 14,
+                        width: 13,
+                        height: 13,
                         color: product.isFavorite.value
                             ? Colors.redAccent
                             : AppColors.onboardingSub,
@@ -563,6 +712,69 @@ class HomeView extends StatelessWidget {
                   ),
                 )),
           ),
+
+          // 1b. Availability Indicator Badge (Top Right)
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: product.isAvailableStatus
+                    ? const Color(0xFFE8F5E9)
+                    : const Color(0xFFFFEBEE),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 5,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: product.isAvailableStatus
+                          ? const Color(0xFF2E7D32)
+                          : const Color(0xFFC62828),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Text(
+                    product.isAvailableStatus ? 'In Stock' : 'Sold Out',
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: product.isAvailableStatus
+                          ? const Color(0xFF2E7D32)
+                          : const Color(0xFFC62828),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // 1c. Floating Discount Tag Pill (if product hasDiscount)
+          if (product.hasDiscount && product.discountPercentage > 0)
+            Positioned(
+              top: 40,
+              left: 10,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE74C3C),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  '-${product.discountPercentage.toInt()}%',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ),
 
           // 2. Centered & Scaled Shoe Image with "The Parallax Depth Shift"
           Positioned(
@@ -604,10 +816,7 @@ class HomeView extends StatelessWidget {
                           ..scale(_getShoeScaleFactor(product.image, false)),
                         child: Hero(
                           tag: 'popular_${product.id}_$category',
-                          child: Image.asset(
-                            product.image,
-                            fit: BoxFit.contain,
-                          ),
+                          child: _buildProductImage(product.image),
                         ),
                       ),
                     ],
@@ -673,10 +882,7 @@ class HomeView extends StatelessWidget {
                                 ..scale(_getShoeScaleFactor(product.image, false)),
                               child: Hero(
                                 tag: 'popular_${product.id}_$category',
-                                child: Image.asset(
-                                  product.image,
-                                  fit: BoxFit.contain,
-                                ),
+                                child: _buildProductImage(product.image),
                               ),
                             ),
                           ),
@@ -689,78 +895,168 @@ class HomeView extends StatelessWidget {
 
           // 3. Info Text column (Bottom Left area, padded to avoid overlapping button)
           Positioned(
-            left: 12,
+            left: 10,
             bottom: 8,
-            right: 48,
+            right: 44,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                if (product.isBestSeller) ...[
-                  const ResponsiveText(
-                    'BEST SELLER',
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.onboardingBtn,
-                  ),
-                  const SizedBox(height: 2),
-                ],
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (product.isBestSeller) ...[
+                      const ResponsiveText(
+                        'BEST SELLER',
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.onboardingBtn,
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+                    // ── Company Badge Chip ──
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: AppColors.onboardingBtn.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: ResponsiveText(
+                          product.category,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.onboardingBtn,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
                 ResponsiveText(
                   product.name,
-                  fontSize: 14.5,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w800,
                   color: AppColors.onboardingTitle,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
-                ResponsiveText(
-                  '\$${product.price.toStringAsFixed(2)}',
-                  fontSize: 13.5,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.onboardingTitle,
-                ),
+                const SizedBox(height: 2),
+                if (product.hasDiscount && product.discountedPrice > 0) ...[
+                  Row(
+                    children: [
+                      ResponsiveText(
+                        '\$${product.discountedPrice.toStringAsFixed(2)}',
+                        fontSize: 13,
+                        fontWeight: FontWeight.w900,
+                        color: const Color(0xFFE74C3C),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '\$${product.price.toStringAsFixed(2)}',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
+                          color: Color(0xFF707B81),
+                          decoration: TextDecoration.lineThrough,
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  ResponsiveText(
+                    '\$${product.price.toStringAsFixed(2)}',
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.onboardingTitle,
+                  ),
+                ],
               ],
             ),
           ),
+
+          // ── Semi-transparent dark grey overlay with OUT OF STOCK red badge ──
+          if (product.isOutOfStock)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 60,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.45),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                ),
+                child: Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(6),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFFEF4444).withValues(alpha: 0.45),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: const Text(
+                      'OUT OF STOCK',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
 
           // 4. Add Button (Positioned at exact bottom right corner)
           Positioned(
             bottom: 0,
             right: 0,
             child: GestureDetector(
-              onTap: () {
-                CartController.to.addToCart(product, selectedSize: 40);
-                Get.closeCurrentSnackbar();
-                Get.snackbar(
-                  'Added to Cart',
-                  '${product.name} added to your cart!',
-                  snackPosition: SnackPosition.TOP,
-                  backgroundColor: AppColors.onboardingBtn,
-                  colorText: Colors.white,
-                  margin: const EdgeInsets.only(top: 20, left: 16, right: 16),
-                  duration: const Duration(milliseconds: 1800),
-                  mainButton: TextButton(
-                    onPressed: () => Get.to(() => const CartView()),
-                    child: const Text(
-                      'VIEW CART',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                );
-              },
+              onTap: product.isOutOfStock
+                  ? null
+                  : () {
+                      final isNew =
+                          CartController.to.addToCart(product, selectedSize: 40);
+                      if (isNew) {
+                        AppToast.showSuccess(
+                          context: context,
+                          title: 'Added to Cart',
+                          message: '${product.name} added to your cart (Qty: 1)!',
+                        );
+                      } else {
+                        AppToast.showSuccess(
+                          context: context,
+                          title: 'Already in Cart',
+                          message:
+                              '${product.name} is already in your cart (Qty: 1)!',
+                        );
+                      }
+                    },
               child: Container(
                 width: 38,
                 height: 38,
-                decoration: const BoxDecoration(
-                  color: AppColors.onboardingBtn,
-                  borderRadius: BorderRadius.only(
+                decoration: BoxDecoration(
+                  color: product.isOutOfStock
+                      ? const Color(0xFFCBD5E1)
+                      : AppColors.onboardingBtn,
+                  borderRadius: const BorderRadius.only(
                     topLeft: Radius.circular(12),
                     bottomRight: Radius.circular(16),
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.add,
-                  color: Colors.white,
+                  color: product.isOutOfStock
+                      ? const Color(0xFF94A3B8)
+                      : Colors.white,
                   size: 20,
                 ),
               ),
@@ -823,11 +1119,13 @@ class HomeView extends StatelessWidget {
                       offset: Offset(tagX, 0),
                       child: Opacity(
                         opacity: textOpacity,
-                        child: const ResponsiveText(
-                          'Best Choice',
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onboardingBtn,
+                        child: ResponsiveText(
+                          product.hasDiscount && product.discountPercentage > 0
+                              ? '${product.discountPercentage.toInt()}% OFF DEAL'
+                              : 'Best Choice',
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: product.hasDiscount ? const Color(0xFFE74C3C) : AppColors.onboardingBtn,
                         ),
                       ),
                     ),
@@ -853,12 +1151,33 @@ class HomeView extends StatelessWidget {
                       offset: Offset(priceX, 0),
                       child: Opacity(
                         opacity: textOpacity,
-                        child: ResponsiveText(
-                          '\$${product.price.toStringAsFixed(2)}',
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.onboardingTitle,
-                        ),
+                        child: product.hasDiscount && product.discountedPrice > 0
+                            ? Row(
+                                children: [
+                                  ResponsiveText(
+                                    '\$${product.discountedPrice.toStringAsFixed(2)}',
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.w800,
+                                    color: const Color(0xFFE74C3C),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '\$${product.price.toStringAsFixed(2)}',
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: Color(0xFF707B81),
+                                      decoration: TextDecoration.lineThrough,
+                                    ),
+                                  ),
+                                ],
+                              )
+                            : ResponsiveText(
+                                '\$${product.price.toStringAsFixed(2)}',
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.onboardingTitle,
+                              ),
                       ),
                     ),
                   ],
@@ -905,10 +1224,7 @@ class HomeView extends StatelessWidget {
                             ..scale(baseScale * shoeScale),
                           child: Hero(
                             tag: 'new_arrival_${product.id}',
-                            child: Image.asset(
-                              product.image,
-                              fit: BoxFit.contain,
-                            ),
+                            child: _buildProductImage(product.image),
                           ),
                         ),
                       ],
@@ -941,6 +1257,49 @@ class HomeView extends StatelessWidget {
     ),
   );
 }
+
+  // ── Helper widget for product image (Image.network, Image.file, or Image.asset) ──
+  Widget _buildProductImage(String imagePath) {
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return Image.network(
+        imagePath,
+        fit: BoxFit.contain,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return const Center(
+            child: ShimmerImageLoader(
+              width: 100,
+              height: 70,
+              borderRadius: 12,
+            ),
+          );
+        },
+        errorBuilder: (_, __, ___) => Image.asset(
+          'assets/images/shoe_nike_1.png',
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Icon(Icons.style, size: 50, color: Colors.grey),
+        ),
+      );
+    } else if (imagePath.startsWith('/') || imagePath.contains(':\\') || imagePath.contains('/data/')) {
+      return Image.file(
+        File(imagePath),
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => Image.asset(
+          'assets/images/shoe_nike_1.png',
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Icon(Icons.style, size: 50, color: Colors.grey),
+        ),
+      );
+    } else if (imagePath.isNotEmpty && imagePath.startsWith('assets/')) {
+      return Image.asset(
+        imagePath,
+        fit: BoxFit.contain,
+        errorBuilder: (_, __, ___) => const Icon(Icons.style, size: 50, color: Colors.grey),
+      );
+    } else {
+      return const Icon(Icons.style, size: 50, color: Colors.grey);
+    }
+  }
 
   // ── TAB 1: FAVORITES SCREEN ──
   Widget _buildFavoritesTab(BuildContext context, HomeController controller) {
@@ -1050,7 +1409,7 @@ class HomeView extends StatelessWidget {
                   Get.to(() => const ProfileView());
                 }),
                 _buildProfileOption(Icons.shopping_bag_outlined, 'My Orders', () {
-                  Get.to(() => const CartView());
+                  Get.to(() => const MyOrdersView());
                 }),
                 _buildProfileOption(Icons.favorite_border_rounded, 'Favorites', () {
                   controller.changeIndex(1); // navigate to favorites tab
@@ -1073,11 +1432,9 @@ class HomeView extends StatelessWidget {
                       buttonColor: Colors.redAccent,
                       onConfirm: () {
                         Get.back();
-                        Get.snackbar(
-                          'Logged Out',
-                          'Successfully logged out.',
-                          snackPosition: SnackPosition.BOTTOM,
-                          margin: const EdgeInsets.only(bottom: 95, left: 16, right: 16),
+                        AppToast.showInfo(
+                          title: 'Logged Out',
+                          message: 'Successfully logged out.',
                         );
                       },
                     );

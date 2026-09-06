@@ -49,7 +49,9 @@ class _FavoriteViewState extends State<FavoriteView> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.find<HomeController>();
+    final controller = Get.isRegistered<HomeController>()
+        ? Get.find<HomeController>()
+        : Get.put(HomeController());
     final size = MediaQuery.of(context).size;
 
     return Scaffold(

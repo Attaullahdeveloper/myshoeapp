@@ -1,30 +1,52 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/product.dart';
 
 class HomeController extends GetxController {
+  final supabase = Supabase.instance.client;
+
   // Bottom Bar tab selection
   final RxInt selectedIndex = 0.obs;
 
-  // Brand Category selection
-  final RxString selectedCategory = 'Nike'.obs;
+  // Selected company ID for the Brand/Popular Shoes tab (null or 'all' represents 'All Brands')
+  final Rxn<String> selectedCompanyId = Rxn<String>(null);
 
-  // List of all mock products
-  final RxList<Product> products = <Product>[].obs;
+  // Loading states for distinct sections
+  final RxBool isLoadingCompanies = false.obs;
+  final RxBool isLoadingProducts = false.obs;
+  final RxBool isLoadingAllProducts = false.obs;
+  final RxBool isLoadingNewArrivals = false.obs;
+  final RxBool isLoadingDiscountProducts = false.obs;
 
-  // List of brands with their asset paths
-  final List<Map<String, String>> brands = [
-    {'name': 'Nike', 'logo': 'assets/images/brand_nike.png'},
-    {'name': 'Puma', 'logo': 'assets/images/brand_puma.png'},
-    {'name': 'Adidas', 'logo': 'assets/images/brand_adidas.png'},
-    {'name': 'Converse', 'logo': 'assets/images/brand_converse.png'},
-    {'name': 'UA', 'logo': 'assets/images/brand_ua.png'},
-  ];
+  // Dynamic list of active companies from Supabase
+  final RxList<Map<String, dynamic>> companies = <Map<String, dynamic>>[].obs;
+
+  // Category name for display
+  final RxString selectedCategory = 'All Brands'.obs;
+
+  // 1. All products across ALL brands (for Admin, Search, and Global catalog)
+  final RxList<Product> allProducts = <Product>[].obs;
+
+  // 2. Products for the currently selected brand tab (Popular Shoes section)
+  final RxList<Product> brandProducts = <Product>[].obs;
+
+  // Backward compatibility alias: `products` points to `brandProducts`
+  RxList<Product> get products => brandProducts;
+
+  // 3. New Arrivals products (decoupled from brand tab)
+  final RxList<Product> newArrivalProducts = <Product>[].obs;
+
+  // 4. Special discount deals / offers products (decoupled from brand tab)
+  final RxList<Product> discountProducts = <Product>[].obs;
 
   late PageController newArrivalsPageController;
   final Map<String, ScrollController> brandScrollControllers = {};
   Timer? _autoScrollTimer;
+
+  RealtimeChannel? _companyChannel;
+  RealtimeChannel? _productChannel;
 
   ScrollController getScrollController(String brand) {
     if (!brandScrollControllers.containsKey(brand)) {
@@ -37,8 +59,61 @@ class HomeController extends GetxController {
   void onInit() {
     super.onInit();
     newArrivalsPageController = PageController(viewportFraction: 0.9);
-    _loadMockProducts();
     _startAutoScroll();
+    _initData();
+    _subscribeRealtime();
+  }
+
+  Future<void> _initData() async {
+    await fetchCompanies();
+    await Future.wait([
+      fetchAllProducts(),
+      fetchBrandProducts(),
+      fetchNewArrivalProducts(),
+      fetchDiscountProducts(),
+    ]);
+  }
+
+  void _subscribeRealtime() {
+    try {
+      _companyChannel = supabase
+          .channel('public:companies:home')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'companies',
+            callback: (payload) {
+              debugPrint('🔄 Realtime company change detected on Home Screen!');
+              fetchCompanies();
+            },
+          )
+          .subscribe();
+
+      _productChannel = supabase
+          .channel('public:products:home')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'products',
+            callback: (payload) {
+              debugPrint('🔄 Realtime product change detected on Home Screen!');
+              refreshAllSections();
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('⚠️ Supabase Realtime Subscription notice: $e');
+    }
+  }
+
+  /// Refreshes all product sections in parallel
+  Future<void> refreshAllSections() async {
+    await Future.wait([
+      fetchAllProducts(),
+      fetchBrandProducts(),
+      fetchNewArrivalProducts(),
+      fetchDiscountProducts(),
+    ]);
   }
 
   @override
@@ -48,7 +123,248 @@ class HomeController extends GetxController {
       controller.dispose();
     }
     _autoScrollTimer?.cancel();
+    if (_companyChannel != null) supabase.removeChannel(_companyChannel!);
+    if (_productChannel != null) supabase.removeChannel(_productChannel!);
     super.onClose();
+  }
+
+  /// ── 1. FETCH COMPANIES (Active companies from Supabase) ──
+  Future<void> fetchCompanies() async {
+    isLoadingCompanies.value = true;
+    try {
+      debugPrint('⏳ Fetching active companies from Supabase "companies" table...');
+      final response = await supabase
+          .from('companies')
+          .select()
+          .eq('is_active', true);
+
+      final List<Map<String, dynamic>> fetched =
+          List<Map<String, dynamic>>.from(response as List);
+
+      companies.assignAll(fetched);
+      debugPrint('✅ Fetched ${fetched.length} active companies from Supabase.');
+
+      // Default brand tab: Select first brand for Popular section if nothing is selected
+      if (companies.isNotEmpty && selectedCompanyId.value == null) {
+        selectedCompanyId.value = companies.first['id']?.toString();
+        selectedCategory.value = companies.first['name']?.toString() ?? 'All Brands';
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching companies from Supabase: $e');
+    } finally {
+      isLoadingCompanies.value = false;
+    }
+  }
+
+  /// ── 2. FETCH ALL PRODUCTS (Global catalog, Admin Panel, Search) ──
+  /// NEVER locks by company_id. Loads everything from Supabase.
+  Future<void> fetchAllProducts() async {
+    isLoadingAllProducts.value = true;
+    try {
+      debugPrint('⏳ Fetching ALL products from Supabase (Global)...');
+      final List<dynamic> response = await supabase
+          .from('products')
+          .select()
+          .order('created_at', ascending: false);
+
+      final List<Product> fetched = response.map((json) {
+        final compId = json['company_id']?.toString();
+        final compName = getCompanyNameById(compId);
+        return Product.fromSupabaseJson(
+          Map<String, dynamic>.from(json),
+          categoryName: compName,
+        );
+      }).toList();
+
+      allProducts.assignAll(fetched);
+      debugPrint('✅ Fetched ${fetched.length} total products globally.');
+    } catch (e) {
+      debugPrint('❌ Error fetching all products: $e');
+    } finally {
+      isLoadingAllProducts.value = false;
+    }
+  }
+
+  /// ── 3. FETCH BRAND PRODUCTS (Popular Shoes Section) ──
+  /// Only applies .eq('company_id', companyId) if a specific company is explicitly selected
+  Future<void> fetchBrandProducts() async {
+    isLoadingProducts.value = true;
+    try {
+      final activeCompanyId = selectedCompanyId.value;
+      final bool isExplicitCompanySelected = activeCompanyId != null &&
+          activeCompanyId.isNotEmpty &&
+          activeCompanyId.toLowerCase() != 'all';
+
+      final dynamic response;
+      if (isExplicitCompanySelected) {
+        debugPrint('⏳ Fetching brand products for company_id=$activeCompanyId...');
+        response = await supabase
+            .from('products')
+            .select()
+            .eq('company_id', activeCompanyId)
+            .order('created_at', ascending: false);
+      } else {
+        debugPrint('⏳ Fetching popular products for all brands...');
+        response = await supabase
+            .from('products')
+            .select()
+            .order('created_at', ascending: false);
+      }
+
+      if (response is List) {
+        final List<Product> fetchedProducts = response.map((json) {
+          final compId = json['company_id']?.toString();
+          final compName = getCompanyNameById(compId);
+          return Product.fromSupabaseJson(
+            Map<String, dynamic>.from(json),
+            categoryName: compName,
+          );
+        }).toList();
+
+        brandProducts.assignAll(fetchedProducts);
+        debugPrint('✅ Fetched ${fetchedProducts.length} brand products.');
+      }
+    } catch (e) {
+      debugPrint('❌ Error fetching brand products: $e');
+      if (brandProducts.isEmpty && allProducts.isNotEmpty) {
+        brandProducts.assignAll(allProducts);
+      }
+    } finally {
+      isLoadingProducts.value = false;
+    }
+  }
+
+  // Alias fetchProducts to fetchBrandProducts for any external callers
+  Future<void> fetchProducts() => fetchBrandProducts();
+
+  /// ── 4. FETCH NEW ARRIVALS (Completely Decoupled from Brand Selector) ──
+  /// Fetches products where is_new_arrival = true, or latest products sorted by created_at
+  Future<void> fetchNewArrivalProducts() async {
+    isLoadingNewArrivals.value = true;
+    try {
+      debugPrint('⏳ Fetching New Arrivals independently...');
+      List<dynamic> response = [];
+
+      try {
+        response = await supabase
+            .from('products')
+            .select()
+            .eq('is_new_arrival', true)
+            .order('created_at', ascending: false);
+      } catch (err) {
+        debugPrint('⚠️ Note on is_new_arrival column query: $err');
+      }
+
+      // If no explicit is_new_arrival items, fallback to latest products
+      if (response.isEmpty) {
+        response = await supabase
+            .from('products')
+            .select()
+            .order('created_at', ascending: false)
+            .limit(10);
+      }
+
+      final List<Product> fetchedNewArrivals = response.map((json) {
+        final compId = json['company_id']?.toString();
+        final compName = getCompanyNameById(compId);
+        return Product.fromSupabaseJson(
+          Map<String, dynamic>.from(json),
+          categoryName: compName,
+        );
+      }).toList();
+
+      newArrivalProducts.assignAll(fetchedNewArrivals);
+      debugPrint('✅ Fetched ${fetchedNewArrivals.length} new arrival products.');
+    } catch (e) {
+      debugPrint('❌ Error fetching new arrival products: $e');
+    } finally {
+      isLoadingNewArrivals.value = false;
+    }
+  }
+
+  /// ── 5. FETCH SPECIAL OFFERS / DISCOUNT PRODUCTS (Completely Decoupled) ──
+  /// Fetches products where is_special = true, is_special_offer = true, or has_discount = true
+  Future<void> fetchDiscountProducts() async {
+    isLoadingDiscountProducts.value = true;
+    try {
+      debugPrint('⏳ Fetching Special Offers / Discount Deals independently...');
+      List<dynamic> response = [];
+
+      try {
+        response = await supabase
+            .from('products')
+            .select()
+            .or('is_special.eq.true,has_discount.eq.true,is_special_offer.eq.true')
+            .order('created_at', ascending: false);
+      } catch (err) {
+        debugPrint('⚠️ Note on combined discount query: $err, falling back to is_special...');
+        try {
+          response = await supabase
+              .from('products')
+              .select()
+              .eq('is_special', true);
+        } catch (_) {
+          try {
+            response = await supabase
+                .from('products')
+                .select()
+                .eq('has_discount', true);
+          } catch (_) {
+            response = [];
+          }
+        }
+      }
+
+      // If response is empty, select items with discount percentage > 0 or status containing 'special'
+      if (response.isEmpty && allProducts.isNotEmpty) {
+        final localSpecials = allProducts
+            .where((p) => p.isSpecialOffer || p.hasDiscount || p.status.toLowerCase().contains('special'))
+            .toList();
+        if (localSpecials.isNotEmpty) {
+          discountProducts.assignAll(localSpecials);
+          isLoadingDiscountProducts.value = false;
+          return;
+        }
+      }
+
+      final List<Product> fetchedDiscounts = response.map((json) {
+        final compId = json['company_id']?.toString();
+        final compName = getCompanyNameById(compId);
+        return Product.fromSupabaseJson(
+          Map<String, dynamic>.from(json),
+          categoryName: compName,
+        );
+      }).toList();
+
+      discountProducts.assignAll(fetchedDiscounts);
+      debugPrint('✅ Fetched ${fetchedDiscounts.length} special deal products.');
+    } catch (e) {
+      debugPrint('❌ Error fetching special deal products: $e');
+    } finally {
+      isLoadingDiscountProducts.value = false;
+    }
+  }
+
+  /// Helper to get company name by company ID
+  String getCompanyNameById(String? compId) {
+    if (compId == null) return 'All Brands';
+    final comp = companies.firstWhereOrNull(
+      (c) => c['id']?.toString() == compId.toString(),
+    );
+    if (comp != null && comp['name'] != null) {
+      return comp['name'].toString();
+    }
+    return 'Brand';
+  }
+
+  /// ── 6. UI STATE MANAGEMENT (Select Company Chip) ──
+  /// When a brand is selected, it ONLY updates Popular Shoes (brandProducts).
+  /// New Arrivals and Special Offers remain independent!
+  void selectCompany(String? companyId) {
+    selectedCompanyId.value = companyId;
+    final compName = getCompanyNameById(companyId);
+    selectedCategory.value = compName;
+    fetchBrandProducts();
   }
 
   void _startAutoScroll() {
@@ -61,10 +377,8 @@ class HomeController extends GetxController {
         final nextPage = currentPage + 1;
 
         if (nextPage >= newArrivalsCount) {
-          // Instant Jump back to the start (Clean & Simple, no back-scroll animation)
           newArrivalsPageController.jumpToPage(0);
         } else {
-          // Smooth slide forward to the next page
           newArrivalsPageController.animateToPage(
             nextPage,
             duration: const Duration(milliseconds: 800),
@@ -81,255 +395,60 @@ class HomeController extends GetxController {
 
   void changeCategory(String category) {
     selectedCategory.value = category;
+    if (category.toLowerCase() == 'all' || category.toLowerCase() == 'all brands') {
+      selectCompany(null);
+      return;
+    }
+    final match = companies.firstWhereOrNull(
+      (c) => (c['name'] ?? '').toString().toLowerCase() == category.toLowerCase(),
+    );
+    selectCompany(match != null ? match['id']?.toString() : null);
   }
 
   void toggleFavorite(String productId) {
-    final index = products.indexWhere((p) => p.id == productId);
-    if (index != -1) {
-      products[index].isFavorite.value = !products[index].isFavorite.value;
-      products.refresh(); // Notify listeners of list changes
+    // Check across all lists
+    for (var list in [allProducts, brandProducts, newArrivalProducts, discountProducts]) {
+      final index = list.indexWhere((p) => p.id == productId);
+      if (index != -1) {
+        list[index].isFavorite.value = !list[index].isFavorite.value;
+        list.refresh();
+      }
     }
   }
 
   void addProduct(Product product) {
-    products.insert(0, product);
-    products.refresh();
+    allProducts.insert(0, product);
+    brandProducts.insert(0, product);
+    if (product.isNewArrival) newArrivalProducts.insert(0, product);
+    if (product.isSpecialOffer || product.hasDiscount) discountProducts.insert(0, product);
+    allProducts.refresh();
+    brandProducts.refresh();
   }
 
   void updateProduct(Product updatedProduct) {
-    final index = products.indexWhere((p) => p.id == updatedProduct.id);
-    if (index != -1) {
-      products[index] = updatedProduct;
-      products.refresh();
+    for (var list in [allProducts, brandProducts, newArrivalProducts, discountProducts]) {
+      final index = list.indexWhere((p) => p.id == updatedProduct.id);
+      if (index != -1) {
+        list[index] = updatedProduct;
+        list.refresh();
+      }
     }
   }
 
   void deleteProduct(String productId) {
-    products.removeWhere((p) => p.id == productId);
-    products.refresh();
+    allProducts.removeWhere((p) => p.id == productId);
+    brandProducts.removeWhere((p) => p.id == productId);
+    newArrivalProducts.removeWhere((p) => p.id == productId);
+    discountProducts.removeWhere((p) => p.id == productId);
+    allProducts.refresh();
+    brandProducts.refresh();
   }
 
-  // Filtered products list based on selected category
-  List<Product> get filteredProducts {
-    return products.where((p) => p.category.toLowerCase() == selectedCategory.value.toLowerCase()).toList();
-  }
+  // Filtered products list (returns current brand products list)
+  List<Product> get filteredProducts => brandProducts;
 
-  // List of favorite products
+  // List of favorite products (checked from allProducts)
   List<Product> get favoriteProducts {
-    return products.where((p) => p.isFavorite.value).toList();
-  }
-
-  // List of new arrivals products
-  List<Product> get newArrivalProducts {
-    return products.where((p) => p.isNewArrival).toList();
-  }
-
-  void _loadMockProducts() {
-    products.assignAll([
-      Product(
-        id: 'nike_1',
-        name: 'Nike Jordan',
-        category: 'Nike',
-        price: 240.00,
-        image: 'assets/images/shoe_nike_1.png',
-        rating: 4.8,
-        isBestSeller: true,
-        description: 'The Nike Air Max 270 delivers visible air under every step. Updated for modern comfort, it nods to the original 1991 Air Max 180.',
-      ),
-      Product(
-        id: 'nike_2',
-        name: 'Nike Max',
-        category: 'Nike',
-        price: 180.00,
-        image: 'assets/images/shoe_nike_2.png',
-        rating: 4.5,
-        isBestSeller: true,
-        description: 'The Nike Joyride Run Flyknit is designed to help make running feel easier and give your legs a day off. Tiny foam beads underfoot conform to your foot.',
-      ),
-      Product(
-        id: 'nike_3',
-        name: 'Nike Air Max 90',
-        category: 'Nike',
-        price: 210.00,
-        image: 'assets/images/shoe_nike_3.png',
-        rating: 4.7,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'Clean lines, versatile and timeless. The peoples shoe returns with the Nike Air Max 90, featuring the iconic Waffle sole.',
-      ),
-      Product(
-        id: 'nike_4',
-        name: 'Nike VaporMax',
-        category: 'Nike',
-        price: 220.00,
-        image: 'assets/images/shoe_nike_2.png',
-        rating: 4.6,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'Features a revolutionary VaporMax Air cushioning system from heel to toe, delivering an incredibly light, bouncy ride.',
-      ),
-      Product(
-        id: 'nike_5',
-        name: 'Nike Air Force 1',
-        category: 'Nike',
-        price: 130.00,
-        image: 'assets/images/shoe_nike_1.png',
-        rating: 4.8,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'The legend lives on in the Nike Air Force 1, featuring classic court style and premium Air cushioning.',
-      ),
-      Product(
-        id: 'puma_1',
-        name: 'Puma RS-X Bold',
-        category: 'Puma',
-        price: 150.00,
-        image: 'assets/images/shoe_nike_1.png',
-        rating: 4.3,
-        isBestSeller: true,
-        description: 'X marks extreme. Exaggerated. RS-X Bold features chunky retro silhouette with bold brandings and premium materials.',
-      ),
-      Product(
-        id: 'puma_2',
-        name: 'Puma Rider Play',
-        category: 'Puma',
-        price: 120.00,
-        image: 'assets/images/shoe_nike_3.png',
-        rating: 4.4,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'Inspired by the Fast Rider from 1980, the Future Rider features a slim, shock-absorbing Federbein outsole and super-comfortable Rider Foam.',
-      ),
-      Product(
-        id: 'adidas_1',
-        name: 'Adidas Ultraboost',
-        category: 'Adidas',
-        price: 200.00,
-        image: 'assets/images/boot.png',
-        rating: 4.9,
-        isBestSeller: true,
-        description: 'Prototype after prototype. Innovation after innovation. Meet the pinnacle harmonization of weight, cushioning, and responsiveness.',
-      ),
-      Product(
-        id: 'adidas_2',
-        name: 'Adidas Stan Smith',
-        category: 'Adidas',
-        price: 95.00,
-        image: 'assets/images/shoe_nike_2.png',
-        rating: 4.7,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'Timeless style. Clean design. Stan Smiths have been the gold standard of minimalist leather court sneakers for decades.',
-      ),
-      Product(
-        id: 'converse_1',
-        name: 'Converse Chuck Taylor',
-        category: 'Converse',
-        price: 90.00,
-        image: 'assets/images/shoe_nike_2.png',
-        rating: 4.6,
-        isBestSeller: true,
-        description: 'The definitive sneaker. Originally designed as a basketball shoe, the Chuck Taylor All Star is an emblem of casual style.',
-      ),
-      Product(
-        id: 'converse_2',
-        name: 'Converse Star Hike',
-        category: 'Converse',
-        price: 110.00,
-        image: 'assets/images/shoe_nike_1.png',
-        rating: 4.8,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'A chunky platform and jagged rubber sole put an unexpected twist on your everyday Chucks.',
-      ),
-      Product(
-        id: 'ua_1',
-        name: 'UA Hovr Phantom 2',
-        category: 'UA',
-        price: 160.00,
-        image: 'assets/images/shoe_nike_1.png',
-        rating: 4.4,
-        isBestSeller: true,
-        description: 'Under Armour HOVR technology provides zero gravity feel to maintain energy return that helps eliminate impact.',
-      ),
-      Product(
-        id: 'ua_2',
-        name: 'UA Curry Flow 8',
-        category: 'UA',
-        price: 170.00,
-        image: 'assets/images/shoe_nike_3.png',
-        rating: 4.8,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'Features UA Flow cushioning technology, which is rubber-free, making the shoe lighter and ridiculously grippy.',
-      ),
-      Product(
-        id: 'adidas_3',
-        name: 'Adidas Response Red',
-        category: 'Adidas',
-        price: 145.00,
-        image: 'assets/images/shoe_adidas_red.png',
-        rating: 4.6,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'High-performance running shoe with breathable mesh and responsive cushioning in striking red colorway.',
-      ),
-
-      Product(
-        id: 'nike_7',
-        name: 'Nike Air Zoom Orange',
-        category: 'Nike',
-        price: 165.00,
-        image: 'assets/images/shoe_nike_orange.png',
-        rating: 4.5,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'Eye-catching design meets ultimate comfort with Nike Air Zoom cushioning, styled in vivid white and orange.',
-      ),
-      Product(
-        id: 'nike_8',
-        name: 'Nike Air Max Blue',
-        category: 'Nike',
-        price: 195.00,
-        image: 'assets/images/shoe_nike_blue.png',
-        rating: 4.7,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'Iconic Air Max cushioning with a fresh light blue upper and premium black accents.',
-      ),
-      Product(
-        id: 'nike_9',
-        name: 'Nike Air Zoom Pink',
-        category: 'Nike',
-        price: 155.00,
-        image: 'assets/images/shoe_nike_pink.png',
-        rating: 4.6,
-        isBestSeller: true,
-        isNewArrival: false,
-        description: 'Dynamic support and lightweight responsiveness, wrapped in a bold pink mesh upper.',
-      ),
-      Product(
-        id: 'nike_10',
-        name: 'Nike Joyride Grey',
-        category: 'Nike',
-        price: 175.00,
-        isNewArrival: true,
-        image: 'assets/images/shoe_nike_grey.png',
-        rating: 4.4,
-        isBestSeller: true,
-        description: 'Plush comfort with tiny foam beads underfoot, wrapped in a light grey and yellow colorway.',
-      ),
-      Product(
-        id: 'nike_11',
-        name: 'Nike Zoom Pink Grey',
-        category: 'Nike',
-        price: 185.00,
-        image: 'assets/images/shoe_nike_pink_grey.png',
-        rating: 4.6,
-        isBestSeller: true,
-        isNewArrival: true,
-        description: 'Modern lifestyle running shoe featuring dual-density foam midsole and breathable pink-grey styling.',
-      ),
-    ]);
+    return allProducts.where((p) => p.isFavorite.value).toList();
   }
 }

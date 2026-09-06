@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/app_toast.dart';
+import '../../widgets/app_shimmer.dart';
 import '../../widgets/responsive_text.dart';
 
 class ProfileView extends StatefulWidget {
@@ -11,14 +14,36 @@ class ProfileView extends StatefulWidget {
 }
 
 class _ProfileViewState extends State<ProfileView> {
-  final TextEditingController _nameController =
-      TextEditingController(text: 'Alisson Becker');
-  final TextEditingController _emailController =
-      TextEditingController(text: 'alissonbecker@gmail.com');
-  final TextEditingController _passwordController =
-      TextEditingController(text: '••••••••');
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController(text: '••••••••');
 
   bool _isEditing = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  Future<void> _loadUserProfile() async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      final name = user.userMetadata?['full_name'] ?? user.userMetadata?['name'] ?? user.email?.split('@').first ?? 'Alisson Becker';
+      _nameController.text = name.toString();
+      _emailController.text = user.email ?? 'alissonbecker@gmail.com';
+    } else {
+      _nameController.text = 'Alisson Becker';
+      _emailController.text = 'alissonbecker@gmail.com';
+    }
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -83,14 +108,17 @@ class _ProfileViewState extends State<ProfileView> {
                         setState(() {
                           _isEditing = !_isEditing;
                         });
-                        Get.snackbar(
-                          _isEditing ? 'Editing Mode' : 'Profile Saved',
-                          _isEditing
-                              ? 'You can now update your details.'
-                              : 'Profile details saved successfully.',
-                          snackPosition: SnackPosition.BOTTOM,
-                          margin: const EdgeInsets.only(bottom: 20, left: 16, right: 16),
-                        );
+                        if (_isEditing) {
+                          AppToast.showInfo(
+                            title: 'Editing Mode',
+                            message: 'You can now update your details.',
+                          );
+                        } else {
+                          AppToast.showSuccess(
+                            title: 'Profile Saved',
+                            message: 'Profile details saved successfully.',
+                          );
+                        }
                       },
                       child: Container(
                         width: 44,
@@ -112,74 +140,77 @@ class _ProfileViewState extends State<ProfileView> {
                 ),
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 16),
 
-              // ── CENTER USER AVATAR WITH CAMERA BADGE ───────────────────────
-              Center(
-                child: Column(
-                  children: [
-                    Stack(
-                      children: [
-                        Container(
-                          width: 96,
-                          height: 96,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.06),
-                                blurRadius: 16,
-                                offset: const Offset(0, 6),
-                              ),
-                            ],
-                            image: const DecorationImage(
-                              image: AssetImage('assets/images/ellipse.png'),
-                              fit: BoxFit.cover,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          right: 0,
-                          bottom: 0,
-                          child: Container(
-                            width: 32,
-                            height: 32,
+              if (_isLoading)
+                const ProfileShimmer()
+              else ...[
+                // ── CENTER USER AVATAR WITH CAMERA BADGE ───────────────────────
+                Center(
+                  child: Column(
+                    children: [
+                      Stack(
+                        children: [
+                          Container(
+                            width: 96,
+                            height: 96,
                             decoration: BoxDecoration(
-                              color: AppColors.onboardingBtn,
                               shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                            ),
-                            child: const Center(
-                              child: Icon(
-                                Icons.camera_alt_outlined,
-                                color: Colors.white,
-                                size: 16,
+                              border: Border.all(color: Colors.white, width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.06),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 6),
+                                ),
+                              ],
+                              image: const DecorationImage(
+                                image: AssetImage('assets/images/ellipse.png'),
+                                fit: BoxFit.cover,
                               ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 14),
-                    ResponsiveText(
-                      'Alisson Becker',
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.onboardingTitle,
-                    ),
-                  ],
+                          Positioned(
+                            right: 0,
+                            bottom: 0,
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: AppColors.onboardingBtn,
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 2),
+                              ),
+                              child: const Center(
+                                child: Icon(
+                                  Icons.camera_alt_outlined,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      ResponsiveText(
+                        _nameController.text.isNotEmpty ? _nameController.text : 'User Profile',
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.onboardingTitle,
+                      ),
+                    ],
+                  ),
                 ),
-              ),
 
-              const SizedBox(height: 36),
+                const SizedBox(height: 36),
 
-              // ── FORM INPUT CARDS MATCHING MOCKUP 2 ─────────────────────────
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: size.width * 0.06),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                // ── FORM INPUT CARDS MATCHING MOCKUP 2 ─────────────────────────
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: size.width * 0.06),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     // 1. Full Name
                     ResponsiveText(
                       'Full Name',
@@ -218,6 +249,7 @@ class _ProfileViewState extends State<ProfileView> {
               ),
 
               const SizedBox(height: 40),
+            ],
             ],
           ),
         ),

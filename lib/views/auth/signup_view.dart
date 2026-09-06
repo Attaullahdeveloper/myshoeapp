@@ -1,18 +1,157 @@
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
-import '../../controllers/auth_controller.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../utils/app_colors.dart';
 import '../../utils/app_images.dart';
+import '../../utils/app_toast.dart';
 import '../../widgets/responsive_text.dart';
 import '../../widgets/custom_textfield.dart';
 import '../../widgets/custom_button.dart';
+import '../home/main_zoom_drawer.dart';
 
-class SignUpView extends StatelessWidget {
-  const SignUpView({super.key});
+class SignUpView extends StatefulWidget {
+  final String? initialEmail;
+  final bool isFromCheckout;
+
+  const SignUpView({
+    super.key,
+    this.initialEmail,
+    this.isFromCheckout = false,
+  });
+
+  @override
+  State<SignUpView> createState() => _SignUpViewState();
+}
+
+class _SignUpViewState extends State<SignUpView> {
+  final TextEditingController _nameController = TextEditingController();
+  late final TextEditingController _emailController;
+  final TextEditingController _passwordController = TextEditingController();
+  bool _isPasswordVisible = false;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _emailController = TextEditingController(text: widget.initialEmail ?? '');
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _handleSignUp() async {
+    final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (name.isEmpty) {
+      AppToast.showError(
+        context: context,
+        title: 'Required Field',
+        message: 'Please enter your full name',
+      );
+      return;
+    }
+
+    if (email.isEmpty) {
+      AppToast.showError(
+        context: context,
+        title: 'Required Field',
+        message: 'Please enter your email address',
+      );
+      return;
+    }
+
+    final emailRegex = RegExp(
+      r'^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\.[a-zA-Z0-9-]+)+$',
+    );
+    if (!emailRegex.hasMatch(email)) {
+      AppToast.showError(
+        context: context,
+        title: 'Invalid Email',
+        message: 'Please enter a valid email address (e.g. user@gmail.com)',
+      );
+      return;
+    }
+
+    if (password.isEmpty) {
+      AppToast.showError(
+        context: context,
+        title: 'Required Field',
+        message: 'Please enter a password',
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      AppToast.showError(
+        context: context,
+        title: 'Weak Password',
+        message: 'Password must be at least 6 characters long',
+      );
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final res = await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: password,
+        data: {'full_name': name},
+      );
+
+      if (res.user != null) {
+        if (mounted) {
+          AppToast.showSuccess(
+            context: context,
+            title: 'Account Created',
+            message: 'Account created successfully!',
+          );
+        }
+
+        if (widget.isFromCheckout) {
+          // Direct return to CheckoutView (popping both SignUpView and SignInView)
+          if (mounted) {
+            int count = 0;
+            Navigator.of(context).popUntil((route) => count++ >= 2 || route.isFirst);
+          }
+        } else {
+          // Direct login navigation to HomeView/Dashboard (Skip SignInView completely)
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const MainZoomDrawer()),
+              (route) => false,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        AppToast.showError(
+          context: context,
+          title: 'Registration Failed',
+          message: e.toString().replaceFirst('AuthException: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final controller = Get.put(AuthController());
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
@@ -27,7 +166,7 @@ class SignUpView extends StatelessWidget {
               const SizedBox(height: 16),
               // ── Back Button ──────────────────────────────────────────────────
               GestureDetector(
-                onTap: () => Get.back(),
+                onTap: () => Navigator.pop(context),
                 child: Container(
                   width: 56,
                   height: 56,
@@ -74,30 +213,34 @@ class SignUpView extends StatelessWidget {
               CustomTextField(
                 label: 'Your Name',
                 hint: 'Alisson Becker',
-                controller: controller.signUpName,
+                controller: _nameController,
                 keyboardType: TextInputType.name,
               ),
               const SizedBox(height: 20),
               CustomTextField(
                 label: 'Email Address',
                 hint: 'alissonbecker@gmail.com',
-                controller: controller.signUpEmail,
+                controller: _emailController,
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 20),
-              Obx(() => CustomTextField(
-                    label: 'Password',
-                    hint: '••••••••',
-                    controller: controller.signUpPassword,
-                    isPassword: true,
-                    isPasswordVisible: controller.signUpPasswordVisible.value,
-                    onSuffixIconPressed: controller.toggleSignUpPasswordVisibility,
-                  )),
+              CustomTextField(
+                label: 'Password',
+                hint: '••••••••',
+                controller: _passwordController,
+                isPassword: true,
+                isPasswordVisible: _isPasswordVisible,
+                onSuffixIconPressed: () {
+                  setState(() {
+                    _isPasswordVisible = !_isPasswordVisible;
+                  });
+                },
+              ),
               SizedBox(height: size.height * 0.04),
 
               PrimaryButton(
-                title: 'Sign Up',
-                onPressed: controller.register,
+                title: _isLoading ? 'Creating Account...' : 'Sign Up',
+                onPressed: _isLoading ? () {} : _handleSignUp,
                 borderRadius: 50,
               ),
               const SizedBox(height: 16),
@@ -106,12 +249,10 @@ class SignUpView extends StatelessWidget {
                 title: 'Sign Up with Google',
                 iconAsset: AppImages.google,
                 onPressed: () {
-                  Get.snackbar(
-                    'Google Login',
-                    'Signing up with Google...',
-                    snackPosition: SnackPosition.BOTTOM,
-                    backgroundColor: AppColors.onboardingBtn.withValues(alpha: 0.8),
-                    colorText: Colors.white,
+                  AppToast.showInfo(
+                    context: context,
+                    title: 'Google Login',
+                    message: 'Signing up with Google...',
                   );
                 },
                 borderRadius: 50,
@@ -121,9 +262,9 @@ class SignUpView extends StatelessWidget {
               // ── Footer ───────────────────────────────────────────────────────
               Center(
                 child: GestureDetector(
-                  onTap: () => Get.back(), // Returns to SignInView
+                  onTap: () => Navigator.pop(context), // Returns to SignInView
                   child: RichText(
-                    text: TextSpan(
+                    text: const TextSpan(
                       text: "Already Have An Account? ",
                       style: TextStyle(
                         fontFamily: 'Airbnb Cereal App',

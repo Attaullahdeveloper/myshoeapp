@@ -15,5 +15,8 @@ class CartItem {
     this.quantity = 1,
   });
 
-  double get totalPrice => product.price * quantity;
+  double get originalPrice => product.price * quantity;
+  double get totalPrice => product.finalPrice * quantity;
+  double get totalDiscount => product.actualDiscountAmount * quantity;
+  bool get hasDiscount => product.hasDiscount && totalDiscount > 0;
 }

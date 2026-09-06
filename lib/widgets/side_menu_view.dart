@@ -5,8 +5,8 @@ import '../controllers/home_controller.dart';
 import '../views/auth/signin_view.dart';
 import '../views/cart/cart_view.dart';
 import '../views/profile/profile_view.dart';
+import '../views/orders/my_orders_view.dart';
 import '../views/admin/admin_dashboard_view.dart';
-import '../views/companies/edit_companies_view.dart';
 import '../widgets/responsive_text.dart';
 
 class SideMenuView extends StatelessWidget {
@@ -124,10 +124,10 @@ class SideMenuView extends StatelessWidget {
                       ),
                       _buildMenuItem(
                         icon: Icons.local_shipping_outlined,
-                        title: 'Orders',
+                        title: 'My Orders',
                         onTap: () {
                           zoomDrawerController.close?.call();
-                          Get.to(() => const CartView());
+                          Get.to(() => const MyOrdersView());
                         },
                       ),
                       _buildMenuItem(
@@ -144,14 +144,6 @@ class SideMenuView extends StatelessWidget {
                         onTap: () {
                           zoomDrawerController.close?.call();
                           Get.to(() => const AdminDashboardView());
-                        },
-                      ),
-                      _buildMenuItem(
-                        icon: Icons.business_outlined,
-                        title: 'Edit Companies',
-                        onTap: () {
-                          zoomDrawerController.close?.call();
-                          Get.to(() => const EditCompaniesView());
                         },
                       ),
 
@@ -198,12 +190,15 @@ class SideMenuView extends StatelessWidget {
               color: Colors.white70,
               size: 22,
             ),
-            const SizedBox(width: 18),
-            ResponsiveText(
-              title,
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+            const SizedBox(width: 14),
+            Expanded(
+              child: ResponsiveText(
+                title,
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

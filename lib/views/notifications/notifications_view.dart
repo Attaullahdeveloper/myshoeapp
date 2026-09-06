@@ -4,6 +4,7 @@ import '../../controllers/home_controller.dart';
 import '../../controllers/notification_controller.dart';
 import '../../models/app_notification.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_shimmer.dart';
 import '../../widgets/responsive_text.dart';
 
 class NotificationsView extends StatelessWidget {
@@ -195,12 +196,32 @@ class NotificationsView extends StatelessWidget {
               borderRadius: BorderRadius.circular(14),
             ),
             child: Center(
-              child: Image.asset(
-                item.image,
-                width: 60,
-                fit: BoxFit.contain,
-                filterQuality: FilterQuality.high,
-              ),
+              child: item.image.startsWith('http')
+                  ? Image.network(
+                      item.image,
+                      width: 60,
+                      fit: BoxFit.contain,
+                      loadingBuilder: (context, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return const ShimmerImageLoader(width: 60, height: 60, borderRadius: 10);
+                      },
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.notifications_active_outlined,
+                        size: 28,
+                        color: Color(0xFF5B9EE1),
+                      ),
+                    )
+                  : Image.asset(
+                      item.image,
+                      width: 60,
+                      fit: BoxFit.contain,
+                      filterQuality: FilterQuality.high,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        Icons.notifications_active_outlined,
+                        size: 28,
+                        color: Color(0xFF5B9EE1),
+                      ),
+                    ),
             ),
           ),
 

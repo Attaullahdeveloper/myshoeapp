@@ -3,8 +3,10 @@ import 'package:get/get.dart';
 import '../../controllers/company_controller.dart';
 import '../../controllers/home_controller.dart';
 import '../../utils/app_colors.dart';
+import '../../widgets/app_shimmer.dart';
 import '../../widgets/responsive_text.dart';
 import '../companies/edit_companies_view.dart';
+import 'admin_orders_view.dart';
 import 'edit_products_view.dart';
 
 class AdminDashboardView extends StatelessWidget {
@@ -154,69 +156,92 @@ class AdminDashboardView extends StatelessWidget {
 
                 const SizedBox(height: 24),
 
-                // ── 3. QUICK STATS ROW ──
+                // ── 3. QUICK STATS & MANAGEMENT SECTIONS ──
                 Obx(() {
+                  if (companyController.isLoading.value &&
+                      homeController.isLoadingProducts.value &&
+                      companyController.companies.isEmpty) {
+                    return const AdminDashboardShimmer();
+                  }
+
                   final totalCompanies = companyController.companies.length;
-                  final totalProducts = homeController.products.length;
+                  final totalProducts = homeController.allProducts.isNotEmpty
+                      ? homeController.allProducts.length
+                      : homeController.products.length;
                   final activeCompanies = companyController.companies
                       .where((c) => c.isActive)
                       .length;
 
-                  return Row(
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: _buildStatTile(
-                          title: 'Companies',
-                          value: '$totalCompanies',
-                          subtitle: '$activeCompanies Active',
-                          icon: Icons.business_outlined,
-                          color: const Color(0xFF5B9EE1),
-                        ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildStatTile(
+                              title: 'Companies',
+                              value: '$totalCompanies',
+                              subtitle: '$activeCompanies Active',
+                              icon: Icons.business_outlined,
+                              color: const Color(0xFF5B9EE1),
+                            ),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: _buildStatTile(
+                              title: 'Total Shoes',
+                              value: '$totalProducts',
+                              subtitle: 'In Catalog',
+                              icon: Icons.inventory_2_outlined,
+                              color: const Color(0xFFE74C3C),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: _buildStatTile(
-                          title: 'Total Shoes',
-                          value: '$totalProducts',
-                          subtitle: 'In Catalog',
-                          icon: Icons.inventory_2_outlined,
-                          color: const Color(0xFFE74C3C),
-                        ),
+                      const SizedBox(height: 28),
+                      const ResponsiveText(
+                        'Management Sections',
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1A2530),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // ── 4. COMPANIES BUTTON CARD ──
+                      _buildActionCard(
+                        title: 'Companies Management',
+                        subtitle: 'Fetch, edit and create shoe companies/brands',
+                        icon: Icons.business_center_rounded,
+                        badgeText: 'GET COMPANIES',
+                        accentColor: const Color(0xFF5B9EE1),
+                        onTap: () => Get.to(() => const EditCompaniesView()),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // ── 5. PRODUCTS (SHOES) BUTTON CARD ──
+                      _buildActionCard(
+                        title: 'Products (Shoes) Management',
+                        subtitle: 'Fetch all shoes, edit sizes, multi-colors & multi-images',
+                        icon: Icons.storefront_rounded,
+                        badgeText: 'GET ALL SHOES',
+                        accentColor: const Color(0xFF1A2530),
+                        onTap: () => Get.to(() => const EditProductsView()),
                       ),
                     ],
                   );
                 }),
 
-                const SizedBox(height: 28),
-
-                const ResponsiveText(
-                  'Management Sections',
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFF1A2530),
-                ),
-                const SizedBox(height: 14),
-
-                // ── 4. COMPANIES BUTTON CARD ──
-                _buildActionCard(
-                  title: 'Companies Management',
-                  subtitle: 'Fetch, edit and create shoe companies/brands',
-                  icon: Icons.business_center_rounded,
-                  badgeText: 'GET COMPANIES',
-                  accentColor: const Color(0xFF5B9EE1),
-                  onTap: () => Get.to(() => const EditCompaniesView()),
-                ),
-
                 const SizedBox(height: 16),
 
-                // ── 5. PRODUCTS (SHOES) BUTTON CARD ──
+                // ── 6. ORDERS MANAGEMENT BUTTON CARD ──
                 _buildActionCard(
-                  title: 'Products (Shoes) Management',
-                  subtitle: 'Fetch all shoes, edit sizes, multi-colors & multi-images',
-                  icon: Icons.storefront_rounded,
-                  badgeText: 'GET ALL SHOES',
-                  accentColor: const Color(0xFF1A2530),
-                  onTap: () => Get.to(() => const EditProductsView()),
+                  title: 'Orders Management',
+                  subtitle: 'View, filter and track real-time customer shoe orders',
+                  icon: Icons.local_shipping_rounded,
+                  badgeText: 'VIEW ORDERS',
+                  accentColor: const Color(0xFF4B96E6),
+                  onTap: () => Get.to(() => const AdminOrdersView()),
                 ),
               ],
             ),

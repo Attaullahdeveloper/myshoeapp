@@ -42,13 +42,16 @@ class CartController extends GetxController {
     }
   }
 
-  void addToCart(Product product, {int selectedSize = 40, String selectedUnit = 'EU'}) {
+  bool addToCart(Product product, {int selectedSize = 40, String selectedUnit = 'EU'}) {
     final itemId = '${product.id}_$selectedSize';
     final index = _items.indexWhere((item) => item.id == itemId);
 
     if (index >= 0) {
-      _items[index].quantity += 1;
+      // Keep quantity as 1 (do not increase when clicking Add to Cart from home or product screen)
+      _items[index].quantity = 1;
       _items.refresh();
+      _emitCart();
+      return false; // Already in cart
     } else {
       _items.add(
         CartItem(
@@ -59,8 +62,9 @@ class CartController extends GetxController {
           quantity: 1,
         ),
       );
+      _emitCart();
+      return true; // Newly added
     }
-    _emitCart();
   }
 
   void incrementQuantity(String cartItemId) {
@@ -91,11 +95,17 @@ class CartController extends GetxController {
   }
 
   double get subtotal =>
-      _items.fold(0.0, (sum, item) => sum + (item.product.price * item.quantity));
+      _items.fold(0.0, (sum, item) => sum + item.originalPrice);
 
-  double get shippingCost => _items.isEmpty ? 0.0 : 40.90;
+  double get totalDiscount =>
+      _items.fold(0.0, (sum, item) => sum + item.totalDiscount);
 
-  double get totalCost => subtotal + shippingCost;
+  bool get hasDiscountApplied => totalDiscount > 0;
+
+  double get shippingCost => _items.isEmpty ? 0.0 : 15.00;
+
+  double get totalCost =>
+      (subtotal - totalDiscount + shippingCost).clamp(0.0, double.infinity);
 
   int get itemCount => _items.fold(0, (sum, item) => sum + item.quantity);
 }

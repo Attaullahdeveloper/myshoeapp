@@ -1,10 +1,15 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../controllers/company_controller.dart';
 import '../../controllers/home_controller.dart';
 import '../../models/product.dart';
 import '../../utils/app_colors.dart';
+import '../../utils/app_toast.dart';
+import '../../widgets/app_animated_dropdown.dart';
+import '../../widgets/app_delete_dialog.dart';
+import '../../widgets/app_shimmer.dart';
 import '../../widgets/responsive_text.dart';
 import 'add_edit_product_view.dart';
 
@@ -29,6 +34,13 @@ class _EditProductsViewState extends State<EditProductsView> {
   final RxString _searchQuery = ''.obs;
 
   @override
+  void initState() {
+    super.initState();
+    _selectedBrandFilter.value = 'All';
+    homeController.fetchAllProducts();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
@@ -36,7 +48,7 @@ class _EditProductsViewState extends State<EditProductsView> {
 
   // Filter products based on search query & brand filter chip
   List<Product> get _filteredProducts {
-    return homeController.products.where((p) {
+    return homeController.allProducts.where((p) {
       final matchesSearch = _searchQuery.value.isEmpty ||
           p.name.toLowerCase().contains(_searchQuery.value.toLowerCase()) ||
           p.category.toLowerCase().contains(_searchQuery.value.toLowerCase());
@@ -48,29 +60,59 @@ class _EditProductsViewState extends State<EditProductsView> {
     }).toList();
   }
 
-  // Helper Image Widget for rendering both File paths & Asset paths
+  // Helper Image Widget for rendering Network URLs, File paths & Asset paths
   Widget _buildProductImage(String path, {double width = 80, double height = 80}) {
-    if (path.startsWith('/') || path.contains(':\\') || path.contains('/data/')) {
+    if (path.trim().isEmpty) {
+      return const Icon(
+        Icons.image_not_supported_outlined,
+        color: Colors.grey,
+      );
+    }
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+      return Image.network(
+        path,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        loadingBuilder: (context, child, loadingProgress) {
+          if (loadingProgress == null) return child;
+          return ShimmerImageLoader(
+            width: width,
+            height: height,
+            borderRadius: 14,
+          );
+        },
+        errorBuilder: (_, __, ___) => const Icon(
+          Icons.image_not_supported_outlined,
+          color: Colors.grey,
+        ),
+      );
+    } else if (path.startsWith('assets/')) {
+      return Image.asset(
+        path,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => const Icon(
+          Icons.image_not_supported_outlined,
+          color: Colors.grey,
+        ),
+      );
+    } else if (path.startsWith('/') || path.contains(':\\') || path.contains('/data/')) {
       return Image.file(
         File(path),
         width: width,
         height: height,
-        fit: BoxFit.contain,
+        fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => const Icon(
           Icons.image_not_supported_outlined,
           color: Colors.grey,
         ),
       );
     } else {
-      return Image.asset(
-        path,
-        width: width,
-        height: height,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) => const Icon(
-          Icons.image_not_supported_outlined,
-          color: Colors.grey,
-        ),
+      return const Icon(
+        Icons.image_not_supported_outlined,
+        color: Colors.grey,
       );
     }
   }
@@ -82,7 +124,7 @@ class _EditProductsViewState extends State<EditProductsView> {
       return Color(int.parse(cleanHex, radix: 16));
     } catch (_) {
       return const Color(0xFF5B9EE1);
-    }
+    } 
   }
 
   @override
@@ -91,6 +133,25 @@ class _EditProductsViewState extends State<EditProductsView> {
 
     return Scaffold(
       backgroundColor: AppColors.onboardingBg, // #F9F9F9 Light theme background
+
+      // ── FLOATING ADD SHOE BUTTON AT THE BOTTOM ──
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => Get.to(() => const AddEditProductView()),
+        backgroundColor: const Color(0xFF5B9EE1),
+        elevation: 6,
+        icon: const Icon(Icons.add_rounded, color: Colors.white, size: 22),
+        label: const Text(
+          'Add Shoe',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: Colors.white,
+            letterSpacing: 0.3,
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+
       body: SafeArea(
         child: Column(
           children: [
@@ -100,7 +161,6 @@ class _EditProductsViewState extends State<EditProductsView> {
             Padding(
               padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   // Back Button
                   GestureDetector(
@@ -127,43 +187,15 @@ class _EditProductsViewState extends State<EditProductsView> {
                     ),
                   ),
 
-                  // Title
-                  const ResponsiveText(
-                    'Products (Shoes)',
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF1A2530),
-                  ),
+                  const SizedBox(width: 16),
 
-                  // Add Shoe Button -> Opens Full Screen AddEditProductView
-                  GestureDetector(
-                    onTap: () => Get.to(() => const AddEditProductView()),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF5B9EE1), // #5B9EE1 Accent
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Color(0x335B9EE1),
-                            blurRadius: 10,
-                            offset: Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.add_rounded, color: Colors.white, size: 18),
-                          SizedBox(width: 4),
-                          ResponsiveText(
-                            'Add Shoe',
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        ],
-                      ),
+                  // Title
+                  const Expanded(
+                    child: ResponsiveText(
+                      'Products (Shoes)',
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF1A2530),
                     ),
                   ),
                 ],
@@ -230,22 +262,39 @@ class _EditProductsViewState extends State<EditProductsView> {
 
             const SizedBox(height: 14),
 
-            // ── 3. BRAND FILTER CHIPS ──
-            SizedBox(
-              height: 38,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
-                children: [
-                  _buildFilterChip('All'),
-                  _buildFilterChip('Nike'),
-                  _buildFilterChip('Puma'),
-                  _buildFilterChip('Adidas'),
-                  _buildFilterChip('Converse'),
-                  _buildFilterChip('UA'),
-                ],
-              ),
+            // ── 3. BRAND / COMPANY DROPDOWN FILTER ──
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: size.width * 0.05),
+              child: Obx(() {
+                final companyNames = <String>[];
+                for (var c in homeController.companies) {
+                  final name = c['name']?.toString() ?? '';
+                  if (name.isNotEmpty && !companyNames.contains(name)) {
+                    companyNames.add(name);
+                  }
+                }
+                if (companyNames.isEmpty) {
+                  for (var c in companyController.companies) {
+                    if (!companyNames.contains(c.name)) {
+                      companyNames.add(c.name);
+                    }
+                  }
+                }
+                final allChips = ['All', ...companyNames];
+
+                return AppAnimatedDropdown<String>(
+                  label: 'Brand / Company Filter',
+                  hint: 'Filter by Brand',
+                  value: _selectedBrandFilter.value,
+                  items: allChips,
+                  itemLabel: (brand) =>
+                      brand == 'All' ? 'All Brands & Companies' : brand,
+                  prefixIcon: Icons.business_rounded,
+                  onChanged: (val) {
+                    if (val != null) _selectedBrandFilter.value = val;
+                  },
+                );
+              }),
             ),
 
             const SizedBox(height: 14),
@@ -253,6 +302,10 @@ class _EditProductsViewState extends State<EditProductsView> {
             // ── 4. PRODUCTS LIST ──
             Expanded(
               child: Obx(() {
+                if (homeController.isLoadingAllProducts.value && homeController.allProducts.isEmpty) {
+                  return const AdminProductsShimmer(count: 4);
+                }
+
                 final list = _filteredProducts;
 
                 if (list.isEmpty) {
@@ -292,9 +345,11 @@ class _EditProductsViewState extends State<EditProductsView> {
                 }
 
                 return ListView.builder(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: size.width * 0.05,
-                    vertical: 8,
+                  padding: EdgeInsets.only(
+                    left: size.width * 0.05,
+                    right: size.width * 0.05,
+                    top: 8,
+                    bottom: 80,
                   ),
                   physics: const BouncingScrollPhysics(),
                   itemCount: list.length,
@@ -311,46 +366,7 @@ class _EditProductsViewState extends State<EditProductsView> {
     );
   }
 
-  // ── BRAND FILTER CHIP WIDGET ──
-  Widget _buildFilterChip(String label) {
-    return Obx(() {
-      final isSelected = _selectedBrandFilter.value == label;
-      return GestureDetector(
-        onTap: () => _selectedBrandFilter.value = label,
-        child: Container(
-          margin: const EdgeInsets.only(right: 10),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF1A2530) : Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: isSelected
-                  ? const Color(0xFF1A2530)
-                  : Colors.grey.withValues(alpha: 0.2),
-            ),
-            boxShadow: [
-              if (isSelected)
-                BoxShadow(
-                  color: const Color(0xFF1A2530).withValues(alpha: 0.2),
-                  blurRadius: 6,
-                  offset: const Offset(0, 3),
-                ),
-            ],
-          ),
-          child: Center(
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? Colors.white : const Color(0xFF707B81),
-              ),
-            ),
-          ),
-        ),
-      );
-    });
-  }
+
 
   // ── PRODUCT CARD WIDGET (OVERFLOW FIXED WITH WRAP) ──
   Widget _buildProductCard(BuildContext context, Product product) {
@@ -658,104 +674,34 @@ class _EditProductsViewState extends State<EditProductsView> {
 
   // ── DELETE DIALOG ──
   void _showDeleteDialog(BuildContext context, Product product) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          contentPadding: const EdgeInsets.all(20),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFEBEE),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.delete_forever_rounded,
-                  color: Color(0xFFFF4444),
-                  size: 32,
-                ),
-              ),
-              const SizedBox(height: 16),
-              const ResponsiveText(
-                'Delete Shoe Product?',
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: Color(0xFF1A2530),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Are you sure you want to delete "${product.name}"? It will be removed from both Admin and User views.',
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Color(0xFF707B81),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        side: const BorderSide(color: Color(0xFF707B81)),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: () => Get.back(),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: Color(0xFF707B81),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF4444),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                      onPressed: () {
-                        homeController.deleteProduct(product.id);
-                        Get.back();
-                        Get.snackbar(
-                          'Shoe Product Deleted',
-                          '${product.name} was removed from catalog',
-                          snackPosition: SnackPosition.BOTTOM,
-                          backgroundColor: const Color(0xFFFF4444),
-                          colorText: Colors.white,
-                          margin: const EdgeInsets.all(16),
-                          borderRadius: 12,
-                        );
-                      },
-                      child: const Text(
-                        'Delete',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
+    AppDeleteDialog.show(
+      context,
+      title: 'Delete Shoe Product',
+      description:
+          'Are you sure you want to delete "${product.name}"? It will be permanently removed from both store and catalog.',
+      confirmText: 'Delete',
+      onConfirm: () async {
+        try {
+          final pId = int.tryParse(product.id);
+          if (pId != null) {
+            await Supabase.instance.client
+                .from('products')
+                .delete()
+                .eq('prod_id', pId);
+          } else {
+            await Supabase.instance.client
+                .from('products')
+                .delete()
+                .eq('id', product.id);
+          }
+        } catch (e) {
+          debugPrint('⚠️ Supabase product deletion note: $e');
+        }
+
+        homeController.deleteProduct(product.id);
+        AppToast.showSuccess(
+          title: 'Shoe Product Deleted',
+          message: '${product.name} was removed from catalog',
         );
       },
     );

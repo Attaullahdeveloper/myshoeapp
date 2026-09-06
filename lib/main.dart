@@ -3,8 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'controllers/cart_controller.dart';
-import 'views/home/main_zoom_drawer.dart';
+import 'controllers/home_controller.dart';
 import 'utils/app_colors.dart';
+import 'views/admin/add_edit_product_view.dart';
+import 'views/admin/admin_dashboard_view.dart';
+import 'views/admin/edit_products_view.dart';
+import 'views/companies/edit_companies_view.dart';
+import 'views/home/main_zoom_drawer.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,8 +28,9 @@ Future<void> main() async {
     debugPrint('❌ SUPABASE CONNECTION FAILED: $e');
   }
 
-  // Initialize global CartController
+  // Initialize global controllers
   Get.put(CartController(), permanent: true);
+  Get.lazyPut(() => HomeController(), fenix: true);
 
   // Force portrait orientation for the app
   SystemChrome.setPreferredOrientations([
@@ -60,8 +66,15 @@ class MyShoeApp extends StatelessWidget {
         ),
       ),
 
-      // ── Navigation ──────────────────────────────────────
-      home: const MainZoomDrawer(),
+      // ── Navigation & Registered Routes ──────────────────
+      initialRoute: '/',
+      getPages: [
+        GetPage(name: '/', page: () => const MainZoomDrawer()),
+        GetPage(name: '/AddEditProductView', page: () => const AddEditProductView()),
+        GetPage(name: '/EditProductsView', page: () => const EditProductsView()),
+        GetPage(name: '/AdminDashboardView', page: () => const AdminDashboardView()),
+        GetPage(name: '/EditCompaniesView', page: () => const EditCompaniesView()),
+      ],
 
       // ── Default Page Transition ─────────────────────────
       defaultTransition: Transition.fadeIn,
