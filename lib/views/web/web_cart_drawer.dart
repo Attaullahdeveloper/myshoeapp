@@ -229,7 +229,7 @@ class WebCartDrawer extends StatelessWidget {
                                   ),
                                   const SizedBox(height: 8),
                                   Text(
-                                    '\$${item.unitPrice.toStringAsFixed(2)}',
+                                    '\$${item.product.finalPrice.toStringAsFixed(2)}',
                                     style: const TextStyle(
                                       color: WebColors.gold,
                                       fontSize: 15,
