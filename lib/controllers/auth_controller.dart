@@ -3,6 +3,7 @@ import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../utils/app_toast.dart';
 import '../views/home/main_zoom_drawer.dart';
+import '../services/google_auth_service.dart';
 
 class AuthController extends GetxController {
   // Sign In controllers
@@ -222,6 +223,32 @@ class AuthController extends GetxController {
       AppToast.showError(
         title: 'Password Reset Failed',
         message: e.toString().replaceFirst('AuthException: ', ''),
+      );
+    }
+  }
+
+  Future<void> continueWithGoogle({bool isFromCheckout = false}) async {
+    isLoading.value = true;
+    try {
+      final res = await GoogleAuthService.continueWithGoogle();
+      isLoading.value = false;
+      if (res?.user != null) {
+        final name = res!.user!.userMetadata?['full_name'] ?? res.user!.userMetadata?['name'] ?? res.user!.email?.split('@')[0] ?? 'User';
+        AppToast.showSuccess(
+          title: 'Welcome!',
+          message: 'Signed in with Google as $name',
+        );
+        if (isFromCheckout) {
+          Get.back();
+        } else {
+          Get.offAll(() => const MainZoomDrawer());
+        }
+      }
+    } catch (e) {
+      isLoading.value = false;
+      AppToast.showError(
+        title: 'Google Sign In Failed',
+        message: e.toString().replaceFirst('Exception: ', '').replaceFirst('AuthException: ', ''),
       );
     }
   }

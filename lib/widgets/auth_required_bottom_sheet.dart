@@ -6,6 +6,7 @@ import '../utils/app_images.dart';
 import '../utils/app_toast.dart';
 import '../views/auth/signin_view.dart';
 import '../views/auth/signup_view.dart';
+import '../services/google_auth_service.dart';
 
 class AuthRequiredBottomSheet extends StatefulWidget {
   final double? orderTotal;
@@ -84,17 +85,17 @@ class _AuthRequiredBottomSheetState extends State<AuthRequiredBottomSheet>
   void _handleGoogleSignIn() async {
     HapticFeedback.lightImpact();
     try {
-      await Supabase.instance.client.auth.signInWithOAuth(OAuthProvider.google);
-      if (mounted) {
+      final res = await GoogleAuthService.continueWithGoogle();
+      if (res?.user != null && mounted) {
         Navigator.pop(context, true);
         widget.onAuthSuccess?.call();
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        AppToast.showInfo(
+        AppToast.showError(
           context: context,
-          title: 'Google Sign In',
-          message: 'Redirecting to Google authentication...',
+          title: 'Google Sign In Failed',
+          message: e.toString().replaceFirst('Exception: ', '').replaceFirst('AuthException: ', ''),
         );
       }
     }

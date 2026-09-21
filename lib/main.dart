@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
@@ -7,12 +8,22 @@ import 'controllers/home_controller.dart';
 import 'utils/app_colors.dart';
 import 'views/admin/add_edit_product_view.dart';
 import 'views/admin/admin_dashboard_view.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'views/admin/edit_products_view.dart';
 import 'views/companies/edit_companies_view.dart';
 import 'views/home/main_zoom_drawer.dart';
+import 'views/web/web_shoe_app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables (.env)
+  try {
+    await dotenv.load(fileName: ".env");
+    debugPrint('✅ Environment variables loaded successfully from .env');
+  } catch (e) {
+    debugPrint('⚠️ Warning: .env could not be loaded: $e');
+  }
 
   // Initialize Supabase with user credentials & connection check
   try {
@@ -32,11 +43,13 @@ Future<void> main() async {
   Get.put(CartController(), permanent: true);
   Get.lazyPut(() => HomeController(), fenix: true);
 
-  // Force portrait orientation for the app
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
+  // Force portrait orientation for mobile app
+  if (!kIsWeb) {
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
+  }
 
   runApp(const MyShoeApp());
 }
@@ -69,7 +82,11 @@ class MyShoeApp extends StatelessWidget {
       // ── Navigation & Registered Routes ──────────────────
       initialRoute: '/',
       getPages: [
-        GetPage(name: '/', page: () => const MainZoomDrawer()),
+        GetPage(
+          name: '/',
+          page: () => kIsWeb ? const WebShoeApp() : const MainZoomDrawer(),
+        ),
+        GetPage(name: '/web', page: () => const WebShoeApp()),
         GetPage(name: '/AddEditProductView', page: () => const AddEditProductView()),
         GetPage(name: '/EditProductsView', page: () => const EditProductsView()),
         GetPage(name: '/AdminDashboardView', page: () => const AdminDashboardView()),

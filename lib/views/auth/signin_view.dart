@@ -7,6 +7,7 @@ import '../../widgets/responsive_text.dart';
 import '../../widgets/custom_textfield.dart';
 import '../../widgets/custom_button.dart';
 import '../home/main_zoom_drawer.dart';
+import '../../services/google_auth_service.dart';
 import 'signup_view.dart';
 import 'recovery_view.dart';
 
@@ -31,6 +32,7 @@ class _SignInViewState extends State<SignInView> {
   final TextEditingController _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
 
   @override
   void initState() {
@@ -133,6 +135,53 @@ class _SignInViewState extends State<SignInView> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+        });
+      }
+    }
+  }
+
+  void _handleGoogleSignIn() async {
+    setState(() {
+      _isGoogleLoading = true;
+    });
+
+    try {
+      final res = await GoogleAuthService.continueWithGoogle();
+      if (res?.user != null) {
+        if (mounted) {
+          final name = res!.user!.userMetadata?['full_name'] ??
+              res.user!.userMetadata?['name'] ??
+              res.user!.email?.split('@')[0] ??
+              'User';
+          AppToast.showSuccess(
+            context: context,
+            title: 'Welcome Back!',
+            message: 'Signed in with Google as $name',
+          );
+
+          if (widget.isFromCheckout) {
+            Navigator.pop(context);
+          } else {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const MainZoomDrawer()),
+              (route) => false,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        AppToast.showError(
+          context: context,
+          title: 'Google Sign In Failed',
+          message: e.toString().replaceFirst('Exception: ', '').replaceFirst('AuthException: ', ''),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isGoogleLoading = false;
         });
       }
     }
@@ -246,15 +295,9 @@ class _SignInViewState extends State<SignInView> {
               const SizedBox(height: 16),
 
               CustomOutlineButton(
-                title: 'Sign In with Google',
+                title: _isGoogleLoading ? 'Connecting to Google...' : 'Sign In with Google',
                 iconAsset: AppImages.google,
-                onPressed: () {
-                  AppToast.showInfo(
-                    context: context,
-                    title: 'Google Login',
-                    message: 'Signing in with Google...',
-                  );
-                },
+                onPressed: (_isLoading || _isGoogleLoading) ? () {} : _handleGoogleSignIn,
                 borderRadius: 50,
               ),
               SizedBox(height: size.height * 0.12),
