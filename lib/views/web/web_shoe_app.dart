@@ -382,7 +382,7 @@ class _WebShoeAppState extends State<WebShoeApp> {
                   _activeSection = 'all';
                   _isFavoritesOnly = false;
                 });
-                Get.find<HomeController>().filterByCompany(null, 'All Brands');
+                Get.find<HomeController>().selectCompany(null);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: WebColors.gold,
