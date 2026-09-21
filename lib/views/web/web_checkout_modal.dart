@@ -1,6 +1,5 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../controllers/cart_controller.dart';
 import '../../models/order_model.dart';
@@ -116,7 +115,7 @@ class _WebCheckoutModalState extends State<WebCheckoutModal> {
           prodId: prodId,
           compId: compId,
           price: item.totalPrice,
-          discountApplied: item.discountAmount > 0,
+          discountApplied: item.totalDiscount > 0,
           paymentStatus: _selectedPaymentMethod == 'card',
           phoneNo: _phoneController.text.trim(),
           email: _emailController.text.trim(),
@@ -156,7 +155,10 @@ class _WebCheckoutModalState extends State<WebCheckoutModal> {
         color: Colors.transparent,
         child: Container(
           width: isDesktop ? 780 : size.width * 0.94,
-          maxHeight: size.height * 0.9,
+          constraints: BoxConstraints(
+            maxWidth: 820,
+            maxHeight: size.height * 0.9,
+          ),
           decoration: BoxDecoration(
             color: WebColors.surface,
             borderRadius: BorderRadius.circular(28),

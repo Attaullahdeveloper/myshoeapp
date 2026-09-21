@@ -1,7 +1,5 @@
-import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:get/get.dart';
 import '../../controllers/cart_controller.dart';
 import '../../models/product.dart';
 import '../../utils/app_toast.dart';
@@ -28,7 +26,6 @@ class _WebProductDetailModalState extends State<WebProductDetailModal> {
   late String _selectedImage;
   late int _selectedSize;
   int _selectedColorIndex = 0;
-  int _quantity = 1;
   bool _isAdding = false;
 
   @override
@@ -85,8 +82,10 @@ class _WebProductDetailModalState extends State<WebProductDetailModal> {
         color: Colors.transparent,
         child: Container(
           width: isDesktop ? 940 : size.width * 0.94,
-          maxHeight: size.height * 0.9,
-          constraints: const BoxConstraints(maxWidth: 980),
+          constraints: BoxConstraints(
+            maxWidth: 980,
+            maxHeight: size.height * 0.9,
+          ),
           decoration: BoxDecoration(
             color: WebColors.surface,
             borderRadius: BorderRadius.circular(28),
